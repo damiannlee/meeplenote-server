@@ -1,13 +1,7 @@
 package com.meeplenote.game.internal
 
-import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.Executor
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 
 data class GameSummary(
     val id: Long,
@@ -31,34 +25,21 @@ data class GameSearchResponse(
 }
 
 /**
- * Search priority: local DB hit (1+ rows) returns immediately without calling BGG.
- * Local miss (0 rows) tries BGG search+detail lookup within the latency budget
- * (bgg.timeout-ms) and merges the result; on timeout it returns an empty local
- * result and lets the in-flight fetch keep caching in the background (ADR-003).
+ * Local-only search over games already known to this service (BGG cached or
+ * user-registered custom games). Zero matches return an empty list rather
+ * than an error — the client shows a "register manually" CTA in that case.
+ * BGG on-demand lookup (ADR-003) is tracked separately until BGG API access
+ * is resolved (see docs/adr/ADR-003 implementation note).
  */
 @Service
 class GameSearchService(
     private val gameRepository: GameRepository,
-    private val bggClient: BggClient,
-    private val gameCacheWriter: GameCacheWriter,
-    @Qualifier("gameCacheExecutor") private val gameCacheExecutor: Executor,
-    @Value("\${bgg.timeout-ms}") private val bggTimeoutMs: Long,
 ) {
 
     @Transactional(readOnly = true)
     fun search(query: String, limit: Int): GameSearchResponse {
-        val localResults = searchLocal(query, limit)
-        if (localResults.isNotEmpty()) {
-            return GameSearchResponse.of(localResults.map { it.toSummary() }, limit)
-        }
-
-        val future = CompletableFuture.supplyAsync({ fetchAndCacheFromBgg(query, limit) }, gameCacheExecutor)
-        val merged = try {
-            future.get(bggTimeoutMs, TimeUnit.MILLISECONDS)
-        } catch (ex: TimeoutException) {
-            emptyList()
-        }
-        return GameSearchResponse.of(merged.map { it.toSummary() }, limit)
+        val results = searchLocal(query, limit)
+        return GameSearchResponse.of(results.map { it.toSummary() }, limit)
     }
 
     private fun searchLocal(query: String, limit: Int): List<GameEntity> =
@@ -67,14 +48,6 @@ class GameSearchService(
         } else {
             gameRepository.searchByName(query, limit)
         }
-
-    private fun fetchAndCacheFromBgg(query: String, limit: Int): List<GameEntity> {
-        val candidates = bggClient.search(query).take(limit)
-        if (candidates.isEmpty()) return emptyList()
-
-        val details = bggClient.fetchThings(candidates.map { it.id })
-        return gameCacheWriter.cacheAll(details)
-    }
 
     private fun GameEntity.toSummary() = GameSummary(
         id = id,

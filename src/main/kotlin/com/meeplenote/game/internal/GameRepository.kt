@@ -28,8 +28,4 @@ interface GameRepository : JpaRepository<GameEntity, Long> {
         nativeQuery = true,
     )
     fun searchByName(@Param("q") q: String, @Param("limit") limit: Int): List<GameEntity>
-
-    fun findByBggId(bggId: Long): GameEntity?
-
-    fun findAllByBggIdIn(bggIds: List<Long>): List<GameEntity>
 }

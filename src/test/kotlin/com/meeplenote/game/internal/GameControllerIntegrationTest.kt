@@ -1,11 +1,8 @@
 package com.meeplenote.game.internal
 
 import com.jayway.jsonpath.JsonPath
-import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
-import okhttp3.mockwebserver.RecordedRequest
-import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -24,13 +21,11 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
-import kotlin.math.abs
 
 /**
  * Obtains a token via the auth module's real HTTP contract (Kakao login), then
- * verifies /api/v1/games search and registration. BGG is stubbed on the same
- * MockWebServer via a path-based Dispatcher — one server absorbs both
- * external dependencies (Kakao and BGG).
+ * verifies /api/v1/games local search and custom registration. BGG on-demand
+ * lookup is tracked separately (see docs/adr/ADR-003) and is not covered here.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -43,84 +38,24 @@ class GameControllerIntegrationTest {
         @JvmStatic
         val postgres = PostgreSQLContainer("postgres:15-alpine")
 
-        private val mockServer = MockWebServer().apply {
-            dispatcher = object : Dispatcher() {
-                override fun dispatch(request: RecordedRequest): MockResponse {
-                    val path = request.path.orEmpty()
-                    return when {
-                        path.startsWith("/v2/user/me") -> kakaoUserResponse()
-                        path.startsWith("/search") -> bggSearchResponse(request)
-                        path.startsWith("/thing") -> bggThingResponse(request)
-                        else -> MockResponse().setResponseCode(404)
-                    }
-                }
-            }
-        }
-
-        // id -> query text, so thing's response name actually matches the original query
-        // (otherwise a repeated identical search would never hit the local trgm/ILIKE cache,
-        // which is the exact behavior these tests need to verify).
-        private val idToQuery = java.util.concurrent.ConcurrentHashMap<String, String>()
-
-        private fun kakaoUserResponse() = MockResponse()
-            .setBody("""{"id": 555, "kakao_account": {"profile": {"nickname": "게임유저"}}}""")
-            .addHeader("Content-Type", "application/json")
-
-        private fun bggSearchResponse(request: RecordedRequest): MockResponse {
-            val query = request.requestUrl?.queryParameter("query") ?: "unknown"
-            val id = abs(query.hashCode())
-            idToQuery[id.toString()] = query
-            return MockResponse()
-                .setBody(
-                    """
-                    <items total="1">
-                        <item type="boardgame" id="$id">
-                            <name type="primary" value="${query.uppercase()}"/>
-                        </item>
-                    </items>
-                    """.trimIndent(),
-                )
-                .addHeader("Content-Type", "text/xml")
-        }
-
-        private fun bggThingResponse(request: RecordedRequest): MockResponse {
-            val id = request.requestUrl?.queryParameter("id")?.split(",")?.first() ?: "0"
-            val name = idToQuery[id]?.uppercase() ?: "GAME-$id"
-            return MockResponse()
-                .setBody(
-                    """
-                    <items>
-                        <item type="boardgame" id="$id">
-                            <thumbnail>https://thumb.jpg</thumbnail>
-                            <name type="primary" value="$name" />
-                            <minplayers value="3" />
-                            <maxplayers value="4" />
-                            <playingtime value="120" />
-                        </item>
-                    </items>
-                    """.trimIndent(),
-                )
-                .addHeader("Content-Type", "text/xml")
-        }
+        private val kakaoMockServer = MockWebServer()
 
         @JvmStatic
         @BeforeAll
         fun startMockServer() {
-            mockServer.start()
+            kakaoMockServer.start()
         }
 
         @JvmStatic
         @AfterAll
         fun stopMockServer() {
-            mockServer.shutdown()
+            kakaoMockServer.shutdown()
         }
 
         @JvmStatic
         @DynamicPropertySource
         fun mockServerProperties(registry: DynamicPropertyRegistry) {
-            val baseUrl = mockServer.url("/").toString().removeSuffix("/")
-            registry.add("kakao.base-uri") { baseUrl }
-            registry.add("bgg.base-uri") { baseUrl }
+            registry.add("kakao.base-uri") { kakaoMockServer.url("/").toString().removeSuffix("/") }
         }
     }
 
@@ -128,6 +63,11 @@ class GameControllerIntegrationTest {
     lateinit var mockMvc: MockMvc
 
     private fun issueAccessToken(): String {
+        kakaoMockServer.enqueue(
+            MockResponse()
+                .setBody("""{"id": 555, "kakao_account": {"profile": {"nickname": "게임유저"}}}""")
+                .addHeader("Content-Type", "application/json"),
+        )
         val loginBody = mockMvc.perform(
             post("/api/v1/auth/social")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -137,32 +77,37 @@ class GameControllerIntegrationTest {
     }
 
     @Test
-    fun `캐시 미스 검색은 BGG 결과를 병합해 반환한다`() {
+    fun `커스텀 등록한 게임은 이름으로 검색된다`() {
+        val accessToken = issueAccessToken()
+
+        mockMvc.perform(
+            post("/api/v1/games")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"name": "우리집 자작 게임"}"""),
+        ).andExpect(status().isCreated)
+
+        mockMvc.perform(
+            get("/api/v1/games")
+                .param("q", "우리집 자작 게임")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items[0].nameKo").value("우리집 자작 게임"))
+            .andExpect(jsonPath("$.items[0].source").value("custom"))
+    }
+
+    @Test
+    fun `일치하는 게임이 없으면 200과 빈 배열을 반환한다`() {
         val accessToken = issueAccessToken()
 
         mockMvc.perform(
             get("/api/v1/games")
-                .param("q", "catan-검색어")
+                .param("q", "존재하지않는게임이름xyz")
                 .header("Authorization", "Bearer $accessToken"),
         )
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.items[0].source").value("bgg"))
-    }
-
-    @Test
-    fun `같은 검색어를 다시 조회하면 로컬 캐시로 응답하고 BGG를 다시 부르지 않는다`() {
-        val accessToken = issueAccessToken()
-
-        mockMvc.perform(
-            get("/api/v1/games").param("q", "repeat-검색어").header("Authorization", "Bearer $accessToken"),
-        ).andExpect(status().isOk)
-
-        val requestsAfterFirstSearch = mockServer.requestCount
-        mockMvc.perform(
-            get("/api/v1/games").param("q", "repeat-검색어").header("Authorization", "Bearer $accessToken"),
-        ).andExpect(status().isOk)
-
-        assertThat(mockServer.requestCount).isEqualTo(requestsAfterFirstSearch)
+            .andExpect(jsonPath("$.items").isEmpty)
     }
 
     @Test
@@ -192,7 +137,7 @@ class GameControllerIntegrationTest {
             post("/api/v1/games")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("Authorization", "Bearer $accessToken")
-                .content("""{"name": "우리집 자작 게임"}"""),
+                .content("""{"name": "다른 자작 게임"}"""),
         )
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.source").value("custom"))

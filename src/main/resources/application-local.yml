@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/meeplenote
+    username: meeplenote
+    password: meeplenote
+
+# 로컬 개발 전용 더미 값 — 운영은 application.yml의 ${JWT_SECRET} 환경변수 사용
+jwt:
+  secret: local-dev-only-secret-please-do-not-use-in-production-32bytes+
+

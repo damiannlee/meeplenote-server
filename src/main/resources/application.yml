@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: meeplenote
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false          # OSIV 금지 — 트랜잭션 경계를 서비스 계층으로 한정
+    hibernate:
+      ddl-auto: validate         # 스키마의 원장은 Flyway. Hibernate는 검증만
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100   # N+1 완화 기본값
+  flyway:
+    enabled: true
+
+server:
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+
+kakao:
+  base-uri: https://kapi.kakao.com
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiry-minutes: 30
+  refresh-token-expiry-days: 30

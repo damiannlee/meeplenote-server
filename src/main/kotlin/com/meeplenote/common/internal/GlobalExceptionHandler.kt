@@ -7,9 +7,11 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
+import org.springframework.web.bind.MissingRequestHeaderException
 import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -37,6 +39,16 @@ class GlobalExceptionHandler {
     fun handleMissingParameter(ex: MissingServletRequestParameterException): ResponseEntity<ErrorResponse> =
         ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(ErrorResponse.of("MISSING_PARAMETER", "필수 파라미터가 누락되었습니다: ${ex.parameterName}"))
+
+    @ExceptionHandler(MissingRequestHeaderException::class)
+    fun handleMissingHeader(ex: MissingRequestHeaderException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(ErrorResponse.of("MISSING_HEADER", "필수 헤더가 누락되었습니다: ${ex.headerName}"))
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException::class)
+    fun handleTypeMismatch(ex: MethodArgumentTypeMismatchException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(ErrorResponse.of("INVALID_PARAMETER", "파라미터 형식이 올바르지 않습니다: ${ex.name}"))
 
     @ExceptionHandler(Exception::class)
     fun handleUnexpected(ex: Exception): ResponseEntity<ErrorResponse> {

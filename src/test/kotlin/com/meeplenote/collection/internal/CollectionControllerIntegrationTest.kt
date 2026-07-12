@@ -15,6 +15,7 @@ import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -186,5 +187,76 @@ class CollectionControllerIntegrationTest {
                 .header("Authorization", "Bearer $accessToken")
                 .content("""{"status": "INVALID"}"""),
         ).andExpect(status().isUnprocessableEntity)
+    }
+
+    @Test
+    fun `컬렉션 목록을 status 없이 조회하면 보유와 위시가 모두 반환된다`() {
+        val accessToken = issueAccessToken(kakaoId = 2007)
+        val ownedGameId = registerGame(accessToken, "칸반")
+        val wishedGameId = registerGame(accessToken, "이스투리아")
+        mockMvc.perform(
+            put("/api/v1/collections/$ownedGameId")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"status": "OWNED"}"""),
+        ).andExpect(status().isOk)
+        mockMvc.perform(
+            put("/api/v1/collections/$wishedGameId")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"status": "WISHED"}"""),
+        ).andExpect(status().isOk)
+
+        mockMvc.perform(
+            get("/api/v1/collections")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.counts.owned").value(1))
+            .andExpect(jsonPath("$.counts.wished").value(1))
+    }
+
+    @Test
+    fun `status=OWNED로 조회하면 보유 게임만 반환된다`() {
+        val accessToken = issueAccessToken(kakaoId = 2008)
+        val ownedGameId = registerGame(accessToken, "테라포밍마스")
+        val wishedGameId = registerGame(accessToken, "글룸헤이븐")
+        mockMvc.perform(
+            put("/api/v1/collections/$ownedGameId")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"status": "OWNED"}"""),
+        ).andExpect(status().isOk)
+        mockMvc.perform(
+            put("/api/v1/collections/$wishedGameId")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"status": "WISHED"}"""),
+        ).andExpect(status().isOk)
+
+        mockMvc.perform(
+            get("/api/v1/collections?status=OWNED")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].gameId").value(ownedGameId))
+            .andExpect(jsonPath("$.items[0].isNoPlay").value(true))
+    }
+
+    @Test
+    fun `지원하지 않는 sort 값이면 400을 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 2009)
+
+        mockMvc.perform(
+            get("/api/v1/collections?sort=unknown")
+                .header("Authorization", "Bearer $accessToken"),
+        ).andExpect(status().isBadRequest)
+    }
+
+    @Test
+    fun `인증 없이 목록을 조회하면 401을 반환한다`() {
+        mockMvc.perform(get("/api/v1/collections")).andExpect(status().isUnauthorized)
     }
 }

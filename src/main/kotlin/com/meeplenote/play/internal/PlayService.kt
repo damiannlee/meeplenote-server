@@ -1,5 +1,7 @@
 package com.meeplenote.play.internal
 
+import com.meeplenote.collection.api.CollectionLookup
+import com.meeplenote.collection.api.CollectionPlayTracker
 import com.meeplenote.common.api.BusinessException
 import com.meeplenote.game.api.GameLookup
 import org.springframework.dao.DataIntegrityViolationException
@@ -34,7 +36,8 @@ class PlayService(
     private val playerRepository: PlayerRepository,
     private val playPlayerRepository: PlayPlayerRepository,
     private val gameLookup: GameLookup,
-    private val collectionOwnershipChecker: CollectionOwnershipChecker,
+    private val collectionLookup: CollectionLookup,
+    private val collectionPlayTracker: CollectionPlayTracker,
 ) {
 
     @Transactional
@@ -46,7 +49,9 @@ class PlayService(
         val playedAt = resolvePlayedAt(request.playedAt)
 
         val play = try {
-            insertPlay(userId, idempotencyKey, request, playedAt)
+            insertPlay(userId, idempotencyKey, request, playedAt).also {
+                collectionPlayTracker.recordPlay(userId, it.gameId, it.playedAt)
+            }
         } catch (ex: DataIntegrityViolationException) {
             playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey) ?: throw ex
         }
@@ -130,7 +135,7 @@ class PlayService(
 
     private fun buildResponse(userId: Long, play: PlayEntity): PlayResponse {
         val totalPlayCount = playRepository.countByUserIdAndGameId(userId, play.gameId)
-        val suggestAddToCollection = !collectionOwnershipChecker.isOwned(userId, play.gameId)
+        val suggestAddToCollection = !collectionLookup.isOwned(userId, play.gameId)
         return PlayResponse.of(play, totalPlayCount, suggestAddToCollection)
     }
 }

@@ -14,3 +14,4 @@
 | [ADR-007](ADR-007_auth_social_login_jwt.md) | 인증 — 소셜 로그인 1종 + 자체 JWT | Accepted |
 | [ADR-008](ADR-008_client_stack_flutter_finalized.md) | 클라이언트 스택 — Flutter 확정 | Accepted |
 | [ADR-009](ADR-009_module_boundary_enforcement.md) | 모듈 경계 — 패키지 규약 + ArchUnit | Accepted |
+| [ADR-010](ADR-010_entity_id_bigint_identity_fk_retained.md) | 엔티티 식별자 — BIGINT IDENTITY + FK 유지 | Accepted |

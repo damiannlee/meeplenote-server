@@ -55,6 +55,7 @@
 | 006/008 | 클라이언트 = Flutter (PWA/RN/CMP 기각) | Claude Code의 Flutter 코드 생성 품질 실측 미달 시 RN 재검토 |
 | 007 | 카카오 로그인 1종 + 자체 JWT (access 30분 + refresh DB 저장/회전) | 카카오 없는 유저 항의 실측 시 2번째 프로바이더 |
 | 009 | 모듈 경계 = 패키지 규약(`api`/`internal`) + ArchUnit | 이벤트 기반 통신 전환 시 Spring Modulith 재검토 |
+| 010 | 엔티티 식별자 = BIGINT IDENTITY + 모듈 간 FK 유지 (UUID PK·FK 제거 기각) | ADR-001/009 트리거(물리적 서비스 분리) 발동 시 FK 제거·PK 전략 재검토 |
 
 ## 5. 클라이언트/서버 책임 경계 (설계 §3 — 정합성 규칙은 항상 서버가 최종)
 

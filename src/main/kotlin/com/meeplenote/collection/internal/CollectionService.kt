@@ -1,10 +1,8 @@
 package com.meeplenote.collection.internal
 
-import com.meeplenote.common.api.BusinessException
 import com.meeplenote.game.api.GameLookup
 import com.meeplenote.game.api.GameSummary
 import org.springframework.data.domain.Sort
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -23,17 +21,6 @@ enum class CollectionSort {
     NAME,
     RECENT_PLAY,
     PLAY_COUNT,
-    ;
-
-    companion object {
-        fun fromQueryParam(value: String?): CollectionSort =
-            when (value) {
-                null, "recent_play" -> RECENT_PLAY
-                "name" -> NAME
-                "play_count" -> PLAY_COUNT
-                else -> throw BusinessException("INVALID_PARAMETER", "지원하지 않는 정렬 값입니다: $value", HttpStatus.BAD_REQUEST)
-            }
-    }
 }
 
 data class CollectionItemResponse(
@@ -121,7 +108,8 @@ class CollectionService(
             )
         }
         return if (sort == CollectionSort.NAME) {
-            items.sortedBy { it.nameKo ?: "" }
+            val namesByGameId = gamesById.mapValues { (_, game) -> game.nameKo ?: game.nameEn ?: "" }
+            items.sortedBy { namesByGameId[it.gameId] ?: "" }
         } else {
             items
         }

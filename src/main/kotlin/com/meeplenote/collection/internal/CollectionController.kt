@@ -3,7 +3,6 @@ package com.meeplenote.collection.internal
 import com.meeplenote.auth.api.CurrentUserProvider
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
-import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -44,13 +43,9 @@ class CollectionController(
     @GetMapping
     fun list(
         @RequestParam(required = false) status: CollectionStatus?,
-        @RequestParam(required = false) sort: String?,
+        @RequestParam(defaultValue = "recent_play") sort: CollectionSort,
     ): ResponseEntity<CollectionListResponse> {
-        val response = collectionService.getCollections(
-            currentUserProvider.currentUserId(),
-            status,
-            CollectionSort.fromQueryParam(sort),
-        )
+        val response = collectionService.getCollections(currentUserProvider.currentUserId(), status, sort)
         return ResponseEntity.ok(response)
     }
 }

@@ -123,9 +123,21 @@ class CollectionServiceTest {
     }
 
     @Test
-    fun `지원하지 않는 정렬 값은 INVALID_PARAMETER 예외를 던진다`() {
-        val ex = assertThrows<BusinessException> { CollectionSort.fromQueryParam("unknown") }
+    fun `nameKo가 없는 게임은 nameEn으로 정렬된다`() {
+        val koGameId = 20L
+        val enOnlyEntity = CollectionEntity(userId = userId, gameId = gameId, status = CollectionStatus.OWNED)
+        val koEntity = CollectionEntity(userId = userId, gameId = koGameId, status = CollectionStatus.OWNED)
+        whenever(collectionRepository.findAllByUserId(eq(userId), any())).thenReturn(listOf(enOnlyEntity, koEntity))
+        whenever(gameLookup.getSummaries(listOf(gameId, koGameId))).thenReturn(
+            listOf(
+                GameSummary(id = gameId, nameKo = null, nameEn = "Zoo", thumbnailUrl = null),
+                GameSummary(id = koGameId, nameKo = "가나다", nameEn = null, thumbnailUrl = null),
+            ),
+        )
+        whenever(collectionRepository.countByUserIdAndStatus(any(), any())).thenReturn(0L)
 
-        assertThat(ex.code).isEqualTo("INVALID_PARAMETER")
+        val response = collectionService.getCollections(userId, null, CollectionSort.NAME)
+
+        assertThat(response.items.map { it.gameId }).containsExactly(gameId, koGameId)
     }
 }

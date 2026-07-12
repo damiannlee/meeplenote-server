@@ -49,13 +49,12 @@ class PlayService(
         val playedAt = resolvePlayedAt(request.playedAt)
 
         val play = try {
-            insertPlay(userId, idempotencyKey, request, playedAt).also {
-                collectionPlayTracker.recordPlay(userId, it.gameId, it.playedAt)
-            }
+            insertPlay(userId, idempotencyKey, request, playedAt)
         } catch (ex: DataIntegrityViolationException) {
-            playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey) ?: throw ex
+            return buildResponse(userId, playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey) ?: throw ex)
         }
 
+        collectionPlayTracker.recordPlay(userId, play.gameId, play.playedAt)
         return buildResponse(userId, play)
     }
 

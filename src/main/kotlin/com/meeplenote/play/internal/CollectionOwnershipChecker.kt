@@ -5,9 +5,10 @@ import jakarta.persistence.PersistenceContext
 import org.springframework.stereotype.Component
 
 /**
- * TODO(M3): replace with collection.api.CollectionLookup once the collection module exists.
- * The `collection` module has no code yet, so this reads the `collections` table directly
- * without crossing any module boundary ArchUnit protects.
+ * TODO(M4): replace with collection.api.CollectionLookup (now implemented by
+ * collection.internal.CollectionLookupService) once M4 wires play<->collection together.
+ * This still reads the `collections` table directly to avoid changing PlayService's
+ * dependency wiring outside this story's scope.
  */
 @Component
 class CollectionOwnershipChecker(

@@ -8,7 +8,7 @@
 - ADR-009 (모듈 경계 강제 방식)는 Status: Accepted (2026-07-11 승인).
 - 서비스명 확정: 미플수첩 (meeplenote), 2026-07-11.
 - 페르소나 B 5~10명 인터뷰 **미실시** (n=1 자가응답만 근거). 개발과 별개로 진행 필요.
-- **6단계(구현) 진행 상황 (2026-07-11)**: M7(카카오 로그인+JWT) 완료·머지. M2(한글 게임 검색 — 초성/한글/영문, 로컬 DB 대상 + 커스텀 게임 등록) 완료·머지. **M8(BGG 온디맨드 캐시)는 보류** — 실제 BGG XML API2가 현재 Cloudflare 봇 차단으로 401을 반환해 무인증 온디맨드 조회가 성립하지 않음(`docs/adr/ADR-003` 구현 노트, `feat/m8-bgg-cache` 브랜치에 코드 보존). BGG 접근 문제 해결 전까지 게임 검색은 로컬 DB(직접 등록 게임)만 대상. 다음 순서는 M1(10초 기록).
+- **6단계(구현) 진행 상황 (2026-07-12)**: M7(카카오 로그인+JWT) 완료·머지. M2(한글 게임 검색 — 초성/한글/영문, 로컬 DB 대상 + 커스텀 게임 등록) 완료·머지. **M8(BGG 온디맨드 캐시)는 보류** — 실제 BGG XML API2가 현재 Cloudflare 봇 차단으로 401을 반환해 무인증 온디맨드 조회가 성립하지 않음(`docs/adr/ADR-003` 구현 노트, `feat/m8-bgg-cache` 브랜치에 코드 보존). BGG 접근 문제 해결 전까지 게임 검색은 로컬 DB(직접 등록 게임)만 대상. **M1(`POST /api/v1/plays`, `feat/m1-play-recording` 브랜치) 구현 완료, 머지 대기** — 범위는 생성 API 하나(GET 목록/PATCH/DELETE는 다음 스토리). 구현 중 `game.api.GameLookup`(게임 존재 검증용 최소 공개 인터페이스) 신설, `collection` 모듈이 아직 없어 `play.internal.CollectionOwnershipChecker`가 `collections` 테이블을 임시로 직접 조회(TODO(M3) 주석, M3 구현 시 `collection.api`로 이관). **버그 발견 및 수정**: `build.gradle.kts`의 `com.fasterxml.jackson.module:jackson-module-kotlin`(Jackson 2)이 Spring Boot 4.1의 기본 Jackson 3(`tools.jackson.*`)과 맞지 않아 Kotlin data class의 디폴트 파라미터(예: `players: List<PlayerInput> = emptyList()`)가 요청 바디에 없을 때 역직렬화가 깨지는 잠재 버그였음 — `tools.jackson.module:jackson-module-kotlin`으로 교체. 이전까지 이 버그가 안 드러난 이유는 기존 엔드포인트(M2/M7)가 전부 필수 필드만 썼기 때문. 다음 순서는 M3/M4(컬렉션 연동).
 
 ## 1. 이 프로젝트가 아닌 것 (매 기능 제안마다 먼저 대조할 것)
 

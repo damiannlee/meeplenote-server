@@ -1,0 +1,306 @@
+package com.meeplenote.play.internal
+
+import com.jayway.jsonpath.JsonPath
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.http.MediaType
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.test.context.DynamicPropertyRegistry
+import org.springframework.test.context.DynamicPropertySource
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.junit.jupiter.Container
+import org.testcontainers.junit.jupiter.Testcontainers
+import java.time.LocalDate
+import java.util.UUID
+
+/**
+ * Obtains a token via the auth module's real HTTP contract (Kakao login) and registers
+ * a game via the game module's real HTTP contract, then exercises POST /api/v1/plays.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Testcontainers
+class PlayControllerIntegrationTest {
+
+    companion object {
+        @Container
+        @ServiceConnection
+        @JvmStatic
+        val postgres = PostgreSQLContainer("postgres:15-alpine")
+
+        private val kakaoMockServer = MockWebServer()
+
+        @JvmStatic
+        @BeforeAll
+        fun startMockServer() {
+            kakaoMockServer.start()
+        }
+
+        @JvmStatic
+        @AfterAll
+        fun stopMockServer() {
+            kakaoMockServer.shutdown()
+        }
+
+        @JvmStatic
+        @DynamicPropertySource
+        fun mockServerProperties(registry: DynamicPropertyRegistry) {
+            registry.add("kakao.base-uri") { kakaoMockServer.url("/").toString().removeSuffix("/") }
+        }
+    }
+
+    @Autowired
+    lateinit var mockMvc: MockMvc
+
+    @Autowired
+    lateinit var jdbcTemplate: JdbcTemplate
+
+    private fun issueAccessToken(kakaoId: Long, nickname: String = "게임유저"): String {
+        kakaoMockServer.enqueue(
+            MockResponse()
+                .setBody("""{"id": $kakaoId, "kakao_account": {"profile": {"nickname": "$nickname"}}}""")
+                .addHeader("Content-Type", "application/json"),
+        )
+        val loginBody = mockMvc.perform(
+            post("/api/v1/auth/social")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"provider": "kakao", "token": "dummy-token"}"""),
+        ).andReturn().response.contentAsString
+        return JsonPath.read(loginBody, "$.accessToken")
+    }
+
+    private fun registerGame(accessToken: String, name: String): Long {
+        val body = mockMvc.perform(
+            post("/api/v1/games")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"name": "$name"}"""),
+        ).andReturn().response.contentAsString
+        return JsonPath.read<Int>(body, "$.id").toLong()
+    }
+
+    @Test
+    fun `최소 필드로 기록하면 201과 오늘 날짜를 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1001)
+        val gameId = registerGame(accessToken, "카탄")
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId}"""),
+        )
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.playedAt").value(LocalDate.now().toString()))
+            .andExpect(jsonPath("$.totalPlayCountForGame").value(1))
+            .andExpect(jsonPath("$.suggestAddToCollection").value(true))
+    }
+
+    @Test
+    fun `플레이어 목록을 포함해 기록하면 성공한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1002)
+        val gameId = registerGame(accessToken, "루미큐브")
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content(
+                    """{"gameId": $gameId, "players": [
+                        {"name": "철수", "score": 10, "isWinner": true},
+                        {"name": "영희", "score": 8}
+                    ]}""",
+                ),
+        ).andExpect(status().isCreated)
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId, "players": [{"name": "철수", "score": 5}]}"""),
+        ).andExpect(status().isCreated)
+    }
+
+    @Test
+    fun `동일 Idempotency-Key로 재요청하면 최초 기록을 그대로 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1003)
+        val gameId = registerGame(accessToken, "스플렌더")
+        val idempotencyKey = UUID.randomUUID().toString()
+
+        val firstBody = mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", idempotencyKey)
+                .content("""{"gameId": $gameId}"""),
+        ).andExpect(status().isCreated).andReturn().response.contentAsString
+        val firstId = JsonPath.read<Int>(firstBody, "$.id")
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", idempotencyKey)
+                .content("""{"gameId": $gameId}"""),
+        )
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.id").value(firstId))
+    }
+
+    @Test
+    fun `존재하지 않는 gameId로 기록하면 404 GAME_NOT_FOUND를 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1004)
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": 999999}"""),
+        )
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.error.code").value("GAME_NOT_FOUND"))
+    }
+
+    @Test
+    fun `Idempotency-Key 헤더 없이 요청하면 400을 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1005)
+        val gameId = registerGame(accessToken, "티츄")
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"gameId": $gameId}"""),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.error.code").value("MISSING_HEADER"))
+    }
+
+    @Test
+    fun `미래 playedAt으로 기록하면 422를 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1006)
+        val gameId = registerGame(accessToken, "아그리콜라")
+        val tomorrow = LocalDate.now().plusDays(1)
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId, "playedAt": "$tomorrow"}"""),
+        ).andExpect(status().isUnprocessableEntity)
+    }
+
+    @Test
+    fun `rating이 범위를 벗어나면 422를 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1007)
+        val gameId = registerGame(accessToken, "윙스팬")
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId, "rating": 6}"""),
+        ).andExpect(status().isUnprocessableEntity)
+    }
+
+    @Test
+    fun `같은 게임 두 번 기록하면 두 번째 응답의 totalPlayCountForGame은 2다`() {
+        val accessToken = issueAccessToken(kakaoId = 1008)
+        val gameId = registerGame(accessToken, "테라포밍마스")
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId}"""),
+        ).andExpect(status().isCreated)
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId}"""),
+        )
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.totalPlayCountForGame").value(2))
+    }
+
+    @Test
+    fun `보유 컬렉션이 있으면 suggestAddToCollection이 false를 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1009)
+        val gameId = registerGame(accessToken, "글룸헤이븐")
+
+        // NOTE: `collection` 모듈이 아직 없어 등록 API가 없다. M3 구현 후 API 경유로 교체할 것.
+        val ownerUserId = jdbcTemplate.queryForObject(
+            "SELECT created_by_user_id FROM games WHERE id = ?",
+            Long::class.java,
+            gameId,
+        )
+        jdbcTemplate.update(
+            "INSERT INTO collections (user_id, game_id, status) VALUES (?, ?, 'OWNED')",
+            ownerUserId,
+            gameId,
+        )
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId}"""),
+        )
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.suggestAddToCollection").value(false))
+    }
+
+    @Test
+    fun `타 유저가 등록한 playerId를 지정하면 404를 반환한다`() {
+        val accessTokenA = issueAccessToken(kakaoId = 1010, nickname = "userA")
+        val gameIdA = registerGame(accessTokenA, "브라스버밍엄")
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessTokenA")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameIdA, "players": [{"name": "userA친구"}]}"""),
+        ).andExpect(status().isCreated)
+
+        val playerIdOfUserA = jdbcTemplate.queryForObject(
+            "SELECT id FROM players WHERE name = 'userA친구'",
+            Long::class.java,
+        )
+
+        val accessTokenB = issueAccessToken(kakaoId = 1011, nickname = "userB")
+        val gameIdB = registerGame(accessTokenB, "이스투리아")
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessTokenB")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameIdB, "players": [{"playerId": $playerIdOfUserA}]}"""),
+        )
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.error.code").value("PLAYER_NOT_FOUND"))
+    }
+}

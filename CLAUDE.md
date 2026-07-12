@@ -1,6 +1,6 @@
 # CLAUDE.md — meeplenote-server
 
-> 이 파일은 1~5단계 산출물(문제정의/시장조사/기능명세/시스템설계/ADR/스캐폴드)을 구현 단계에서 즉시 참조 가능하도록 압축한 것이다. 전체 근거는 `docs/`(`problem_definition.md`, `2단계_시장조사_경쟁사분석.md`, `3단계_MVP기능명세.md`, `4단계_시스템설계.md`, `docs/adr/`)를 참조하되, **여기 없는 내용을 원본 문서에서 찾아야 한다면 이 파일이 불완전한 것 — 발견 시 이 파일에 추가할 것.**
+> 이 파일은 1~5단계 산출물(문제정의/시장조사/기능명세/시스템설계/ADR/스캐폴드)을 구현 단계에서 즉시 참조 가능하도록 압축한 것이다. 전체 근거는 `docs/`(`problem_definition.md`, `02_market_research_competitor_analysis.md`, `03_mvp_feature_spec.md`, `04_system_design.md`, `docs/adr/`)를 참조하되, **여기 없는 내용을 원본 문서에서 찾아야 한다면 이 파일이 불완전한 것 — 발견 시 이 파일에 추가할 것.**
 
 ## 0. 지금 상태 (2026-07-11 기준)
 
@@ -8,6 +8,7 @@
 - ADR-009 (모듈 경계 강제 방식)는 Status: Accepted (2026-07-11 승인).
 - 서비스명 확정: 미플수첩 (meeplenote), 2026-07-11.
 - 페르소나 B 5~10명 인터뷰 **미실시** (n=1 자가응답만 근거). 개발과 별개로 진행 필요.
+- **6단계(구현) 진행 상황 (2026-07-11)**: M7(카카오 로그인+JWT) 완료·머지. M2(한글 게임 검색 — 초성/한글/영문, 로컬 DB 대상 + 커스텀 게임 등록) 완료·머지. **M8(BGG 온디맨드 캐시)는 보류** — 실제 BGG XML API2가 현재 Cloudflare 봇 차단으로 401을 반환해 무인증 온디맨드 조회가 성립하지 않음(`docs/adr/ADR-003` 구현 노트, `feat/m8-bgg-cache` 브랜치에 코드 보존). BGG 접근 문제 해결 전까지 게임 검색은 로컬 DB(직접 등록 게임)만 대상. 다음 순서는 M1(10초 기록).
 
 ## 1. 이 프로젝트가 아닌 것 (매 기능 제안마다 먼저 대조할 것)
 
@@ -66,7 +67,7 @@
 | 노플 배지 | — | 컬렉션 응답에 포함 |
 | 중복 기록 방지 | 버튼 비활성화 | Idempotency-Key (최종 방어선) |
 
-## 6. API 계약 핵심 (설계 §5 발췌 — 전체는 4단계_시스템설계.md)
+## 6. API 계약 핵심 (설계 §5 발췌 — 전체는 04_system_design.md)
 
 - 에러 포맷 통일: `{ "error": { "code", "message", "detail" } }`
 - 목록 조회는 **커서 기반** (오프셋 금지) — `plays` 등
@@ -76,7 +77,7 @@
 
 ## 7. DB 스키마 원장
 
-`src/main/resources/db/migration/V1__init.sql`. 신규 마이그레이션은 **머지된 버전 수정 금지, 새 버전 추가만** (docs/CONVENTIONS.md §3). ERD 엔티티별 향후 병목 지점과 대비책은 4단계_시스템설계.md §4 "이 설계에서 나중에 병목이 될 지점" 참조 — 특히 `play_players` 성장과 `import_jobs.raw_payload` 정리는 Could 기능 도입 시점에 다시 볼 것.
+`src/main/resources/db/migration/V1__init.sql`. 신규 마이그레이션은 **머지된 버전 수정 금지, 새 버전 추가만** (docs/CONVENTIONS.md §3). ERD 엔티티별 향후 병목 지점과 대비책은 04_system_design.md §4 "이 설계에서 나중에 병목이 될 지점" 참조 — 특히 `play_players` 성장과 `import_jobs.raw_payload` 정리는 Could 기능 도입 시점에 다시 볼 것.
 
 ## 8. 코드 스타일 & 컨벤션 (Kotlin)
 
@@ -96,7 +97,7 @@
 ## 9. 작업 사이클 (로드맵 6단계 그대로 적용)
 
 0. 작업 시작 전 `git branch --show-current`로 현재 브랜치 확인 후 사용자에게 알릴 것. 예상 브랜치가 아니면 진행 전 확인받을 것.
-1. 유저 스토리 하나 선택 → **구현 계획 먼저 제시**, 승인 후 구현 (US 번호는 3단계_MVP기능명세.md §3 참조)
+1. 유저 스토리 하나 선택 → **구현 계획 먼저 제시**, 승인 후 구현 (US 번호는 03_mvp_feature_spec.md §3 참조)
 2. 구현 후 자체 리뷰: N+1, 트랜잭션 경계, 보안(입력 검증, 타 유저 자원 접근 403)
 3. 단위+통합 테스트 작성 (ArchUnit 모듈 경계 테스트는 이미 있음 — 깨지면 절단선을 넘은 것, 우회 금지). 최종 반영 전 `./gradlew test`로 전체 테스트 통과 확인.
 4. 브랜치/커밋은 docs/CONVENTIONS.md 규칙 (GitHub Flow, squash merge, Conventional Commits)

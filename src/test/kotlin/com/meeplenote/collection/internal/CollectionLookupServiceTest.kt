@@ -42,14 +42,15 @@ class CollectionLookupServiceTest {
     }
 
     @Test
-    fun `WISHED 게임에 기록해도 playCount가 갱신되지 않는다`() {
+    fun `WISHED 게임도 기록하면 playCount와 lastPlayedAt이 갱신된다`() {
         val entity = CollectionEntity(userId = userId, gameId = gameId, status = CollectionStatus.WISHED)
         whenever(collectionRepository.findByUserIdAndGameId(userId, gameId)).thenReturn(entity)
+        val playedAt = LocalDate.of(2026, 7, 1)
 
-        service.recordPlay(userId, gameId, LocalDate.now())
+        service.recordPlay(userId, gameId, playedAt)
 
-        assertThat(entity.playCount).isEqualTo(0)
-        assertThat(entity.lastPlayedAt).isNull()
+        assertThat(entity.playCount).isEqualTo(1)
+        assertThat(entity.lastPlayedAt).isEqualTo(playedAt)
     }
 
     @Test

@@ -16,6 +16,10 @@ class CollectionLookupService(
     override fun isOwned(userId: Long, gameId: Long): Boolean =
         collectionRepository.findByUserIdAndGameId(userId, gameId)?.status == CollectionStatus.OWNED
 
+    @Transactional(readOnly = true)
+    override fun countNoPlay(userId: Long): Long =
+        collectionRepository.countByUserIdAndStatusAndPlayCount(userId, CollectionStatus.OWNED, 0)
+
     /**
      * Tracks play stats regardless of OWNED/WISHED status — a wishlist game can be
      * played (e.g. at a friend's place) before the user ever buys it. The "no-play"

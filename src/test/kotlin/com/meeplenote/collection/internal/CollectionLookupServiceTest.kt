@@ -71,4 +71,12 @@ class CollectionLookupServiceTest {
         assertThat(entity.playCount).isEqualTo(2)
         assertThat(entity.lastPlayedAt).isEqualTo(LocalDate.of(2026, 7, 10))
     }
+
+    @Test
+    fun `countNoPlay는 OWNED이면서 playCount가 0인 게임 수를 조회한다`() {
+        whenever(collectionRepository.countByUserIdAndStatusAndPlayCount(userId, CollectionStatus.OWNED, 0))
+            .thenReturn(3L)
+
+        assertThat(service.countNoPlay(userId)).isEqualTo(3L)
+    }
 }

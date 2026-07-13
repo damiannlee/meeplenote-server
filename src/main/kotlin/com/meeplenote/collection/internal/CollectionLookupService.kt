@@ -17,13 +17,13 @@ class CollectionLookupService(
         collectionRepository.findByUserIdAndGameId(userId, gameId)?.status == CollectionStatus.OWNED
 
     /**
-     * Only OWNED rows accumulate play stats — "no-play" badge tracks plays recorded
-     * while the game is owned (US-2.2: "보유 후 한 번도 기록이 없는 게임"), not lifetime plays.
+     * Tracks play stats regardless of OWNED/WISHED status — a wishlist game can be
+     * played (e.g. at a friend's place) before the user ever buys it. The "no-play"
+     * badge itself (isNoPlay) still only applies to OWNED rows; see CollectionService.
      */
     @Transactional
     override fun recordPlay(userId: Long, gameId: Long, playedAt: LocalDate) {
         val collection = collectionRepository.findByUserIdAndGameId(userId, gameId) ?: return
-        if (collection.status != CollectionStatus.OWNED) return
         collection.playCount += 1
         collection.lastPlayedAt = maxOf(collection.lastPlayedAt ?: playedAt, playedAt)
         collection.updatedAt = Instant.now()

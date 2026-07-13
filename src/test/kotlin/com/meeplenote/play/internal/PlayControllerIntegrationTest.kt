@@ -305,6 +305,35 @@ class PlayControllerIntegrationTest {
     }
 
     @Test
+    fun `위시리스트 게임을 기록하면 playCount는 갱신되지만 노플 배지는 붙지 않는다`() {
+        val accessToken = issueAccessToken(kakaoId = 1013)
+        val gameId = registerGame(accessToken, "아컴호러")
+
+        mockMvc.perform(
+            put("/api/v1/collections/$gameId")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"status": "WISHED"}"""),
+        ).andExpect(status().isOk)
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId}"""),
+        ).andExpect(status().isCreated)
+
+        mockMvc.perform(
+            get("/api/v1/collections")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(jsonPath("$.items[0].status").value("WISHED"))
+            .andExpect(jsonPath("$.items[0].playCount").value(1))
+            .andExpect(jsonPath("$.items[0].isNoPlay").value(false))
+    }
+
+    @Test
     fun `타 유저가 등록한 playerId를 지정하면 404를 반환한다`() {
         val accessTokenA = issueAccessToken(kakaoId = 1010, nickname = "userA")
         val gameIdA = registerGame(accessTokenA, "브라스버밍엄")

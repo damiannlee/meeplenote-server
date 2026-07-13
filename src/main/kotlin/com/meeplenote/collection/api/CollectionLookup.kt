@@ -2,4 +2,5 @@ package com.meeplenote.collection.api
 
 interface CollectionLookup {
     fun isOwned(userId: Long, gameId: Long): Boolean
+    fun countNoPlay(userId: Long): Long
 }

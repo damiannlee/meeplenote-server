@@ -8,4 +8,5 @@ interface CollectionRepository : JpaRepository<CollectionEntity, Long> {
     fun findAllByUserIdAndStatus(userId: Long, status: CollectionStatus, sort: Sort): List<CollectionEntity>
     fun findAllByUserId(userId: Long, sort: Sort): List<CollectionEntity>
     fun countByUserIdAndStatus(userId: Long, status: CollectionStatus): Long
+    fun countByUserIdAndStatusAndPlayCount(userId: Long, status: CollectionStatus, playCount: Int): Long
 }

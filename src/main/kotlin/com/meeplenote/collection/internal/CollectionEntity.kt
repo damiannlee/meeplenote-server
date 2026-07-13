@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import java.time.LocalDate
 
 enum class CollectionStatus {
     OWNED,
@@ -29,6 +30,12 @@ class CollectionEntity(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0
+
+    @Column(name = "play_count", nullable = false)
+    var playCount: Int = 0
+
+    @Column(name = "last_played_at")
+    var lastPlayedAt: LocalDate? = null
 
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now()

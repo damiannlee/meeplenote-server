@@ -6,6 +6,8 @@ import org.springframework.data.repository.query.Param
 
 interface GameRepository : JpaRepository<GameEntity, Long> {
 
+    fun findAllByIdIn(ids: Collection<Long>): List<GameEntity>
+
     @Query(
         value = """
             SELECT * FROM games

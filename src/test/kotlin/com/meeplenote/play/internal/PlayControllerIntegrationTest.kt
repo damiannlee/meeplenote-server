@@ -15,7 +15,9 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.testcontainers.containers.PostgreSQLContainer
@@ -249,17 +251,12 @@ class PlayControllerIntegrationTest {
         val accessToken = issueAccessToken(kakaoId = 1009)
         val gameId = registerGame(accessToken, "글룸헤이븐")
 
-        // NOTE: `collection` 모듈이 아직 없어 등록 API가 없다. M3 구현 후 API 경유로 교체할 것.
-        val ownerUserId = jdbcTemplate.queryForObject(
-            "SELECT created_by_user_id FROM games WHERE id = ?",
-            Long::class.java,
-            gameId,
-        )
-        jdbcTemplate.update(
-            "INSERT INTO collections (user_id, game_id, status) VALUES (?, ?, 'OWNED')",
-            ownerUserId,
-            gameId,
-        )
+        mockMvc.perform(
+            put("/api/v1/collections/$gameId")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"status": "OWNED"}"""),
+        ).andExpect(status().isOk)
 
         mockMvc.perform(
             post("/api/v1/plays")
@@ -270,6 +267,41 @@ class PlayControllerIntegrationTest {
         )
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.suggestAddToCollection").value(false))
+    }
+
+    @Test
+    fun `기록을 저장하면 컬렉션의 플레이 횟수와 노플 배지가 갱신된다`() {
+        val accessToken = issueAccessToken(kakaoId = 1012)
+        val gameId = registerGame(accessToken, "테라미스티카")
+
+        mockMvc.perform(
+            put("/api/v1/collections/$gameId")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"status": "OWNED"}"""),
+        ).andExpect(status().isOk)
+
+        mockMvc.perform(
+            get("/api/v1/collections")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(jsonPath("$.items[0].playCount").value(0))
+            .andExpect(jsonPath("$.items[0].isNoPlay").value(true))
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId}"""),
+        ).andExpect(status().isCreated)
+
+        mockMvc.perform(
+            get("/api/v1/collections")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(jsonPath("$.items[0].playCount").value(1))
+            .andExpect(jsonPath("$.items[0].isNoPlay").value(false))
     }
 
     @Test

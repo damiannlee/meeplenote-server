@@ -4,8 +4,10 @@ data class GameSummary(
     val id: Long,
     val nameKo: String?,
     val nameEn: String?,
+    val thumbnailUrl: String?,
 )
 
 interface GameLookup {
     fun getSummary(gameId: Long): GameSummary
+    fun getSummaries(gameIds: Collection<Long>): List<GameSummary>
 }

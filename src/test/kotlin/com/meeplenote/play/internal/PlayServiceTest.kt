@@ -1,5 +1,7 @@
 package com.meeplenote.play.internal
 
+import com.meeplenote.collection.api.CollectionLookup
+import com.meeplenote.collection.api.CollectionPlayTracker
 import com.meeplenote.common.api.BusinessException
 import com.meeplenote.game.api.GameLookup
 import com.meeplenote.game.api.GameSummary
@@ -23,14 +25,16 @@ class PlayServiceTest {
     private val playerRepository = mock<PlayerRepository>()
     private val playPlayerRepository = mock<PlayPlayerRepository>()
     private val gameLookup = mock<GameLookup>()
-    private val collectionOwnershipChecker = mock<CollectionOwnershipChecker>()
+    private val collectionLookup = mock<CollectionLookup>()
+    private val collectionPlayTracker = mock<CollectionPlayTracker>()
 
     private val playService = PlayService(
         playRepository,
         playerRepository,
         playPlayerRepository,
         gameLookup,
-        collectionOwnershipChecker,
+        collectionLookup,
+        collectionPlayTracker,
     )
 
     private val userId = 1L
@@ -55,35 +59,53 @@ class PlayServiceTest {
         val existing = PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now(), idempotencyKey = idempotencyKey)
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(existing)
         whenever(playRepository.countByUserIdAndGameId(userId, gameId)).thenReturn(3)
-        whenever(collectionOwnershipChecker.isOwned(userId, gameId)).thenReturn(false)
+        whenever(collectionLookup.isOwned(userId, gameId)).thenReturn(false)
 
         val response = playService.recordPlay(userId, idempotencyKey, CreatePlayRequest(gameId = gameId))
 
         assertThat(response.totalPlayCountForGame).isEqualTo(3)
         verify(playRepository, never()).saveAndFlush(any())
         verify(gameLookup, never()).getSummary(any())
+        verify(collectionPlayTracker, never()).recordPlay(any(), any(), any())
     }
 
     @Test
-    fun `동시 요청으로 유니크 제약 위반이 발생하면 기존 기록을 재조회해 반환한다`() {
+    fun `동시 요청으로 유니크 제약 위반이 발생하면 기존 기록을 재조회해 반환하고 컬렉션 통계는 갱신하지 않는다`() {
         val existing = PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now(), idempotencyKey = idempotencyKey)
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey))
             .thenReturn(null)
             .thenReturn(existing)
-        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null))
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
         whenever(playRepository.saveAndFlush(any())).thenThrow(DataIntegrityViolationException("duplicate"))
         whenever(playRepository.countByUserIdAndGameId(userId, gameId)).thenReturn(1)
-        whenever(collectionOwnershipChecker.isOwned(userId, gameId)).thenReturn(false)
+        whenever(collectionLookup.isOwned(userId, gameId)).thenReturn(false)
 
         val response = playService.recordPlay(userId, idempotencyKey, CreatePlayRequest(gameId = gameId))
 
         assertThat(response.gameId).isEqualTo(gameId)
+        verify(collectionPlayTracker, never()).recordPlay(any(), any(), any())
+    }
+
+    @Test
+    fun `신규 기록 삽입에 성공하면 컬렉션 플레이 통계를 갱신한다`() {
+        whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(null)
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
+        val playedAt = LocalDate.now()
+        whenever(playRepository.saveAndFlush(any())).thenAnswer {
+            PlayEntity(userId = userId, gameId = gameId, playedAt = playedAt, idempotencyKey = idempotencyKey)
+        }
+        whenever(playRepository.countByUserIdAndGameId(userId, gameId)).thenReturn(1)
+        whenever(collectionLookup.isOwned(userId, gameId)).thenReturn(true)
+
+        playService.recordPlay(userId, idempotencyKey, CreatePlayRequest(gameId = gameId))
+
+        verify(collectionPlayTracker).recordPlay(userId, gameId, playedAt)
     }
 
     @Test
     fun `유니크 제약 위반 후 재조회해도 못 찾으면 예외를 다시 던진다`() {
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(null)
-        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null))
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
         whenever(playRepository.saveAndFlush(any())).thenThrow(DataIntegrityViolationException("duplicate"))
 
         assertThrows<DataIntegrityViolationException> {
@@ -94,11 +116,11 @@ class PlayServiceTest {
     @Test
     fun `playedAt 생략 시 오늘 날짜로 기록된다`() {
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(null)
-        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null))
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
         val captor = argumentCaptor<PlayEntity>()
         whenever(playRepository.saveAndFlush(captor.capture())).thenAnswer { captor.firstValue }
         whenever(playRepository.countByUserIdAndGameId(userId, gameId)).thenReturn(1)
-        whenever(collectionOwnershipChecker.isOwned(userId, gameId)).thenReturn(false)
+        whenever(collectionLookup.isOwned(userId, gameId)).thenReturn(false)
 
         val response = playService.recordPlay(userId, idempotencyKey, CreatePlayRequest(gameId = gameId))
 
@@ -108,7 +130,7 @@ class PlayServiceTest {
     @Test
     fun `미래 playedAt이면 FUTURE_PLAYED_AT 422를 던진다`() {
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(null)
-        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null))
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
         val request = CreatePlayRequest(gameId = gameId, playedAt = LocalDate.now().plusDays(1))
 
         val ex = assertThrows<BusinessException> { playService.recordPlay(userId, idempotencyKey, request) }
@@ -119,7 +141,7 @@ class PlayServiceTest {
     @Test
     fun `타 유저 소유 playerId를 지정하면 PLAYER_NOT_FOUND를 던진다`() {
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(null)
-        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null))
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
         whenever(playRepository.saveAndFlush(any())).thenAnswer {
             PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now(), idempotencyKey = idempotencyKey)
         }
@@ -134,7 +156,7 @@ class PlayServiceTest {
     @Test
     fun `name만 준 신규 플레이어는 saveAll 1회로 생성된다`() {
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(null)
-        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null))
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
         whenever(playRepository.saveAndFlush(any())).thenAnswer {
             PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now(), idempotencyKey = idempotencyKey)
         }
@@ -143,7 +165,7 @@ class PlayServiceTest {
             (invocation.getArgument<List<PlayerEntity>>(0))
         }
         whenever(playRepository.countByUserIdAndGameId(userId, gameId)).thenReturn(1)
-        whenever(collectionOwnershipChecker.isOwned(userId, gameId)).thenReturn(false)
+        whenever(collectionLookup.isOwned(userId, gameId)).thenReturn(false)
         val request = CreatePlayRequest(
             gameId = gameId,
             players = listOf(PlayerInput(name = "철수"), PlayerInput(name = "영희")),
@@ -159,13 +181,13 @@ class PlayServiceTest {
     fun `기존 이름의 플레이어는 재사용하고 신규 생성하지 않는다`() {
         val existingPlayer = PlayerEntity(userId = userId, name = "철수")
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(null)
-        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null))
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
         whenever(playRepository.saveAndFlush(any())).thenAnswer {
             PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now(), idempotencyKey = idempotencyKey)
         }
         whenever(playerRepository.findAllByUserIdAndNameIn(eq(userId), any())).thenReturn(listOf(existingPlayer))
         whenever(playRepository.countByUserIdAndGameId(userId, gameId)).thenReturn(1)
-        whenever(collectionOwnershipChecker.isOwned(userId, gameId)).thenReturn(false)
+        whenever(collectionLookup.isOwned(userId, gameId)).thenReturn(false)
         val request = CreatePlayRequest(gameId = gameId, players = listOf(PlayerInput(name = "철수")))
 
         playService.recordPlay(userId, idempotencyKey, request)
@@ -176,12 +198,12 @@ class PlayServiceTest {
     @Test
     fun `OWNED 컬렉션이 없으면 suggestAddToCollection이 true다`() {
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(null)
-        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null))
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
         whenever(playRepository.saveAndFlush(any())).thenAnswer {
             PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now(), idempotencyKey = idempotencyKey)
         }
         whenever(playRepository.countByUserIdAndGameId(userId, gameId)).thenReturn(1)
-        whenever(collectionOwnershipChecker.isOwned(userId, gameId)).thenReturn(false)
+        whenever(collectionLookup.isOwned(userId, gameId)).thenReturn(false)
 
         val response = playService.recordPlay(userId, idempotencyKey, CreatePlayRequest(gameId = gameId))
 
@@ -191,12 +213,12 @@ class PlayServiceTest {
     @Test
     fun `OWNED 컬렉션이 있으면 suggestAddToCollection이 false다`() {
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(null)
-        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null))
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
         whenever(playRepository.saveAndFlush(any())).thenAnswer {
             PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now(), idempotencyKey = idempotencyKey)
         }
         whenever(playRepository.countByUserIdAndGameId(userId, gameId)).thenReturn(1)
-        whenever(collectionOwnershipChecker.isOwned(userId, gameId)).thenReturn(true)
+        whenever(collectionLookup.isOwned(userId, gameId)).thenReturn(true)
 
         val response = playService.recordPlay(userId, idempotencyKey, CreatePlayRequest(gameId = gameId))
 
@@ -206,12 +228,12 @@ class PlayServiceTest {
     @Test
     fun `삽입 이후 totalPlayCountForGame을 반환한다`() {
         whenever(playRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)).thenReturn(null)
-        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null))
+        whenever(gameLookup.getSummary(gameId)).thenReturn(GameSummary(gameId, "카탄", null, null))
         whenever(playRepository.saveAndFlush(any())).thenAnswer {
             PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now(), idempotencyKey = idempotencyKey)
         }
         whenever(playRepository.countByUserIdAndGameId(userId, gameId)).thenReturn(5)
-        whenever(collectionOwnershipChecker.isOwned(userId, gameId)).thenReturn(false)
+        whenever(collectionLookup.isOwned(userId, gameId)).thenReturn(false)
 
         val response = playService.recordPlay(userId, idempotencyKey, CreatePlayRequest(gameId = gameId))
 

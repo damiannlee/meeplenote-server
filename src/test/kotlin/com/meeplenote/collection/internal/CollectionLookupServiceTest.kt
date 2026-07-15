@@ -2,6 +2,8 @@ package com.meeplenote.collection.internal
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import java.time.LocalDate
@@ -78,5 +80,29 @@ class CollectionLookupServiceTest {
             .thenReturn(3L)
 
         assertThat(service.countNoPlay(userId)).isEqualTo(3L)
+    }
+
+    @Test
+    fun `getAllForUser는 컬렉션 엔티티를 export 레코드로 변환한다`() {
+        val entity = CollectionEntity(userId = userId, gameId = gameId, status = CollectionStatus.OWNED)
+        entity.playCount = 5
+        entity.lastPlayedAt = LocalDate.of(2026, 7, 1)
+        whenever(collectionRepository.findAllByUserId(eq(userId), any())).thenReturn(listOf(entity))
+
+        val records = service.getAllForUser(userId)
+
+        assertThat(records).hasSize(1)
+        assertThat(records[0].gameId).isEqualTo(gameId)
+        assertThat(records[0].status).isEqualTo("OWNED")
+        assertThat(records[0].playCount).isEqualTo(5)
+        assertThat(records[0].lastPlayedAt).isEqualTo(LocalDate.of(2026, 7, 1))
+        assertThat(records[0].addedAt).isEqualTo(entity.createdAt)
+    }
+
+    @Test
+    fun `컬렉션이 없으면 getAllForUser는 빈 목록을 반환한다`() {
+        whenever(collectionRepository.findAllByUserId(eq(userId), any())).thenReturn(emptyList())
+
+        assertThat(service.getAllForUser(userId)).isEmpty()
     }
 }

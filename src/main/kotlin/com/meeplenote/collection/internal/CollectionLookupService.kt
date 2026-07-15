@@ -1,7 +1,9 @@
 package com.meeplenote.collection.internal
 
+import com.meeplenote.collection.api.CollectionExportRecord
 import com.meeplenote.collection.api.CollectionLookup
 import com.meeplenote.collection.api.CollectionPlayTracker
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -19,6 +21,18 @@ class CollectionLookupService(
     @Transactional(readOnly = true)
     override fun countNoPlay(userId: Long): Long =
         collectionRepository.countByUserIdAndStatusAndPlayCount(userId, CollectionStatus.OWNED, 0)
+
+    @Transactional(readOnly = true)
+    override fun getAllForUser(userId: Long): List<CollectionExportRecord> =
+        collectionRepository.findAllByUserId(userId, Sort.by(Sort.Direction.ASC, "createdAt")).map {
+            CollectionExportRecord(
+                gameId = it.gameId,
+                status = it.status.name,
+                playCount = it.playCount,
+                lastPlayedAt = it.lastPlayedAt,
+                addedAt = it.createdAt,
+            )
+        }
 
     /**
      * Tracks play stats regardless of OWNED/WISHED status — a wishlist game can be

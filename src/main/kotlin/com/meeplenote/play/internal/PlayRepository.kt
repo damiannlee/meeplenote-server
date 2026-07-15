@@ -1,5 +1,6 @@
 package com.meeplenote.play.internal
 
+import org.springframework.data.domain.Sort
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -19,6 +20,7 @@ interface GamePlayCountRow {
 interface PlayRepository : JpaRepository<PlayEntity, Long> {
     fun findByUserIdAndIdempotencyKey(userId: Long, idempotencyKey: UUID): PlayEntity?
     fun findAllByUserIdAndGameIdAndPlayedAt(userId: Long, gameId: Long, playedAt: LocalDate): List<PlayEntity>
+    fun findAllByUserId(userId: Long, sort: Sort): List<PlayEntity>
     fun countByUserIdAndGameId(userId: Long, gameId: Long): Int
     fun countByUserId(userId: Long): Long
     fun countByUserIdAndPlayedAtGreaterThanEqual(userId: Long, from: LocalDate): Long

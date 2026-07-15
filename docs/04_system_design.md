@@ -171,8 +171,15 @@ POST /api/v1/imports/{jobId}/resolve   { resolutions: [{ unmatchedName, gameId }
 
 ### 데이터 내보내기
 ```
-GET /api/v1/exports → 200 (application/json 스트리밍, 전체 기록+컬렉션)
+GET /api/v1/exports → 200 (application/json, 전체 기록+컬렉션)
+{
+  exportedAt: "2026-07-15T00:00:00Z",
+  plays: [{ id, gameId, gameName, playedAt, note, rating, players: [{name, score, isWinner}] }],
+  collections: [{ gameId, gameName, status, playCount, lastPlayedAt, addedAt }]
+}
 ```
+- 구현 시점(2026-07) 확인: 트래픽 규모(MAU 1,000, 피크 RPS<10, 단일 유저 데이터만 조회)에서 청크 스트리밍(`StreamingResponseBody`)은 과설계로 판단해 일반 JSON 응답으로 구현(ADR-002 정신). 데이터 규모가 커지면 그때 스트리밍 재검토.
+- CSV 포맷은 이번 슬라이스 범위 밖(향후 별도 스토리).
 
 ### 사진 업로드
 ```

@@ -27,6 +27,7 @@ class PlayServiceTest {
     private val gameLookup = mock<GameLookup>()
     private val collectionLookup = mock<CollectionLookup>()
     private val collectionPlayTracker = mock<CollectionPlayTracker>()
+    private val playerNameResolver = PlayerNameResolver(playerRepository)
 
     private val playService = PlayService(
         playRepository,
@@ -35,6 +36,7 @@ class PlayServiceTest {
         gameLookup,
         collectionLookup,
         collectionPlayTracker,
+        playerNameResolver,
     )
 
     private val userId = 1L

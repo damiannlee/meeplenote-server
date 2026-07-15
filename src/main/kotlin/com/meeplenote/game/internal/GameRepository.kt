@@ -8,6 +8,8 @@ interface GameRepository : JpaRepository<GameEntity, Long> {
 
     fun findAllByIdIn(ids: Collection<Long>): List<GameEntity>
 
+    fun findByBggId(bggId: Long): GameEntity?
+
     @Query(
         value = """
             SELECT * FROM games

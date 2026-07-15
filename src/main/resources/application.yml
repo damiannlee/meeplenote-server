@@ -12,6 +12,10 @@ spring:
         default_batch_fetch_size: 100   # N+1 완화 기본값
   flyway:
     enabled: true
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
 
 server:
   shutdown: graceful

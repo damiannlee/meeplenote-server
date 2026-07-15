@@ -38,6 +38,7 @@ class PlayService(
     private val gameLookup: GameLookup,
     private val collectionLookup: CollectionLookup,
     private val collectionPlayTracker: CollectionPlayTracker,
+    private val playerNameResolver: PlayerNameResolver,
 ) {
 
     @Transactional
@@ -102,7 +103,7 @@ class PlayService(
         validateOwnership(explicitIds, ownedById)
 
         val namesToResolve = players.filter { it.playerId == null }.mapNotNull { it.name }
-        val resolvedByName = resolveOrCreateByName(userId, namesToResolve)
+        val resolvedByName = playerNameResolver.resolveOrCreateByName(userId, namesToResolve)
 
         return players.map { input ->
             input.playerId?.let { ownedById.getValue(it).id } ?: resolvedByName.getValue(requireName(input)).id
@@ -117,19 +118,6 @@ class PlayService(
         if (missing.isNotEmpty()) {
             throw BusinessException("PLAYER_NOT_FOUND", "존재하지 않거나 소유하지 않은 플레이어입니다", HttpStatus.NOT_FOUND)
         }
-    }
-
-    private fun resolveOrCreateByName(userId: Long, names: List<String>): Map<String, PlayerEntity> {
-        if (names.isEmpty()) return emptyMap()
-        val distinctNames = names.distinct()
-        val existing = playerRepository.findAllByUserIdAndNameIn(userId, distinctNames).associateBy { it.name }
-        val missingNames = distinctNames.filterNot { existing.containsKey(it) }
-        val created = if (missingNames.isEmpty()) {
-            emptyList()
-        } else {
-            playerRepository.saveAll(missingNames.map { PlayerEntity(userId = userId, name = it) })
-        }
-        return existing + created.associateBy { it.name }
     }
 
     private fun buildResponse(userId: Long, play: PlayEntity): PlayResponse {

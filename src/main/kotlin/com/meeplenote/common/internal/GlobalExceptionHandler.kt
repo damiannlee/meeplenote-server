@@ -12,6 +12,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
+import org.springframework.web.multipart.support.MissingServletRequestPartException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -39,6 +40,11 @@ class GlobalExceptionHandler {
     fun handleMissingParameter(ex: MissingServletRequestParameterException): ResponseEntity<ErrorResponse> =
         ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(ErrorResponse.of("MISSING_PARAMETER", "필수 파라미터가 누락되었습니다: ${ex.parameterName}"))
+
+    @ExceptionHandler(MissingServletRequestPartException::class)
+    fun handleMissingPart(ex: MissingServletRequestPartException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(ErrorResponse.of("MISSING_PARAMETER", "필수 파일이 누락되었습니다: ${ex.requestPartName}"))
 
     @ExceptionHandler(MissingRequestHeaderException::class)
     fun handleMissingHeader(ex: MissingRequestHeaderException): ResponseEntity<ErrorResponse> =

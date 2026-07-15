@@ -18,6 +18,7 @@ interface GamePlayCountRow {
 
 interface PlayRepository : JpaRepository<PlayEntity, Long> {
     fun findByUserIdAndIdempotencyKey(userId: Long, idempotencyKey: UUID): PlayEntity?
+    fun findAllByUserIdAndGameIdAndPlayedAt(userId: Long, gameId: Long, playedAt: LocalDate): List<PlayEntity>
     fun countByUserIdAndGameId(userId: Long, gameId: Long): Int
     fun countByUserId(userId: Long): Long
     fun countByUserIdAndPlayedAtGreaterThanEqual(userId: Long, from: LocalDate): Long

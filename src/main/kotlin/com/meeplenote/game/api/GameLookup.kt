@@ -10,4 +10,6 @@ data class GameSummary(
 interface GameLookup {
     fun getSummary(gameId: Long): GameSummary
     fun getSummaries(gameIds: Collection<Long>): List<GameSummary>
+    fun findByBggId(bggId: Long): GameSummary?
+    fun findCandidatesByName(name: String, limit: Int): List<GameSummary>
 }

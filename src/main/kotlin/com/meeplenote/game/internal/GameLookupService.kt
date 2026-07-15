@@ -25,6 +25,14 @@ class GameLookupService(
         return gameRepository.findAllByIdIn(gameIds).map { toSummary(it) }
     }
 
+    @Transactional(readOnly = true)
+    override fun findByBggId(bggId: Long): GameSummary? =
+        gameRepository.findByBggId(bggId)?.let { toSummary(it) }
+
+    @Transactional(readOnly = true)
+    override fun findCandidatesByName(name: String, limit: Int): List<GameSummary> =
+        gameRepository.searchByName(name, limit).map { toSummary(it) }
+
     private fun toSummary(entity: GameEntity) =
         GameSummary(id = entity.id, nameKo = entity.nameKo, nameEn = entity.nameEn, thumbnailUrl = entity.thumbnailUrl)
 }

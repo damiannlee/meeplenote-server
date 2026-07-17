@@ -33,6 +33,8 @@ class ModuleBoundaryTest {
     val statsInternalIsPrivate = internalRule("stats")
     @ArchTest
     val dataimportInternalIsPrivate = internalRule("dataimport")
+    @ArchTest
+    val exportInternalIsPrivate = internalRule("export")
 
     // 모듈 간 순환 의존 금지 — 순환이 생기면 미래의 절단선이 사라진다
     @ArchTest

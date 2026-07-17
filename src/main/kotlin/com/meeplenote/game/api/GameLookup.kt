@@ -5,6 +5,9 @@ data class GameSummary(
     val nameKo: String?,
     val nameEn: String?,
     val thumbnailUrl: String?,
+    val minPlayers: Short? = null,
+    val maxPlayers: Short? = null,
+    val playtime: Short? = null,
 )
 
 interface GameLookup {

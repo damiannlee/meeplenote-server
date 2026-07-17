@@ -140,4 +140,61 @@ class CollectionServiceTest {
 
         assertThat(response.items.map { it.gameId }).containsExactly(gameId, koGameId)
     }
+
+    @Test
+    fun `players 필터는 minPlayers~maxPlayers 범위 안의 게임만 남긴다`() {
+        val fitsId = 30L
+        val tooFewId = 40L
+        val entities = listOf(
+            CollectionEntity(userId = userId, gameId = fitsId, status = CollectionStatus.OWNED),
+            CollectionEntity(userId = userId, gameId = tooFewId, status = CollectionStatus.OWNED),
+        )
+        whenever(collectionRepository.findAllByUserId(eq(userId), any())).thenReturn(entities)
+        whenever(gameLookup.getSummaries(listOf(fitsId, tooFewId))).thenReturn(
+            listOf(
+                GameSummary(id = fitsId, nameKo = "카탄", nameEn = null, thumbnailUrl = null, minPlayers = 3, maxPlayers = 4),
+                GameSummary(id = tooFewId, nameKo = "루미큐브", nameEn = null, thumbnailUrl = null, minPlayers = 2, maxPlayers = 2),
+            ),
+        )
+        whenever(collectionRepository.countByUserIdAndStatus(any(), any())).thenReturn(0L)
+
+        val response = collectionService.getCollections(userId, null, CollectionSort.RECENT_PLAY, players = 4)
+
+        assertThat(response.items.map { it.gameId }).containsExactly(fitsId)
+    }
+
+    @Test
+    fun `maxPlaytime 필터는 playtime이 기준 이하인 게임만 남긴다`() {
+        val shortId = 30L
+        val longId = 40L
+        val entities = listOf(
+            CollectionEntity(userId = userId, gameId = shortId, status = CollectionStatus.OWNED),
+            CollectionEntity(userId = userId, gameId = longId, status = CollectionStatus.OWNED),
+        )
+        whenever(collectionRepository.findAllByUserId(eq(userId), any())).thenReturn(entities)
+        whenever(gameLookup.getSummaries(listOf(shortId, longId))).thenReturn(
+            listOf(
+                GameSummary(id = shortId, nameKo = "카탄", nameEn = null, thumbnailUrl = null, playtime = 60),
+                GameSummary(id = longId, nameKo = "글룸헤이븐", nameEn = null, thumbnailUrl = null, playtime = 180),
+            ),
+        )
+        whenever(collectionRepository.countByUserIdAndStatus(any(), any())).thenReturn(0L)
+
+        val response = collectionService.getCollections(userId, null, CollectionSort.RECENT_PLAY, maxPlaytime = 90)
+
+        assertThat(response.items.map { it.gameId }).containsExactly(shortId)
+    }
+
+    @Test
+    fun `필터 대상 데이터가 없는 게임은 해당 필터가 켜지면 제외된다`() {
+        val entity = CollectionEntity(userId = userId, gameId = gameId, status = CollectionStatus.OWNED)
+        whenever(collectionRepository.findAllByUserId(eq(userId), any())).thenReturn(listOf(entity))
+        whenever(gameLookup.getSummaries(listOf(gameId)))
+            .thenReturn(listOf(GameSummary(id = gameId, nameKo = "커스텀게임", nameEn = null, thumbnailUrl = null)))
+        whenever(collectionRepository.countByUserIdAndStatus(any(), any())).thenReturn(0L)
+
+        val response = collectionService.getCollections(userId, null, CollectionSort.RECENT_PLAY, players = 4)
+
+        assertThat(response.items).isEmpty()
+    }
 }

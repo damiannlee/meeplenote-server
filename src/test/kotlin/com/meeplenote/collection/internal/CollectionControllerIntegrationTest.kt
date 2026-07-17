@@ -246,6 +246,35 @@ class CollectionControllerIntegrationTest {
     }
 
     @Test
+    fun `players 필터를 지정하면 인원수 정보가 없는 커스텀 게임은 제외된다`() {
+        val accessToken = issueAccessToken(kakaoId = 2010)
+        val gameId = registerGame(accessToken, "미분류게임")
+        mockMvc.perform(
+            put("/api/v1/collections/$gameId")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .content("""{"status": "OWNED"}"""),
+        ).andExpect(status().isOk)
+
+        mockMvc.perform(
+            get("/api/v1/collections?players=4")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(0))
+    }
+
+    @Test
+    fun `players가 숫자가 아니면 400을 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 2011)
+
+        mockMvc.perform(
+            get("/api/v1/collections?players=abc")
+                .header("Authorization", "Bearer $accessToken"),
+        ).andExpect(status().isBadRequest)
+    }
+
+    @Test
     fun `지원하지 않는 sort 값이면 400을 반환한다`() {
         val accessToken = issueAccessToken(kakaoId = 2009)
 

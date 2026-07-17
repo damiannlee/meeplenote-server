@@ -44,8 +44,16 @@ class CollectionController(
     fun list(
         @RequestParam(required = false) status: CollectionStatus?,
         @RequestParam(defaultValue = "recent_play") sort: CollectionSort,
+        @RequestParam(required = false) players: Int?,
+        @RequestParam(required = false) maxPlaytime: Int?,
     ): ResponseEntity<CollectionListResponse> {
-        val response = collectionService.getCollections(currentUserProvider.currentUserId(), status, sort)
+        val response = collectionService.getCollections(
+            currentUserProvider.currentUserId(),
+            status,
+            sort,
+            players,
+            maxPlaytime,
+        )
         return ResponseEntity.ok(response)
     }
 }

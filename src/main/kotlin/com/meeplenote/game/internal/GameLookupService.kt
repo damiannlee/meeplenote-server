@@ -34,5 +34,13 @@ class GameLookupService(
         gameRepository.searchByName(name, limit).map { toSummary(it) }
 
     private fun toSummary(entity: GameEntity) =
-        GameSummary(id = entity.id, nameKo = entity.nameKo, nameEn = entity.nameEn, thumbnailUrl = entity.thumbnailUrl)
+        GameSummary(
+            id = entity.id,
+            nameKo = entity.nameKo,
+            nameEn = entity.nameEn,
+            thumbnailUrl = entity.thumbnailUrl,
+            minPlayers = entity.minPlayers,
+            maxPlayers = entity.maxPlayers,
+            playtime = entity.playtimeMinutes,
+        )
 }

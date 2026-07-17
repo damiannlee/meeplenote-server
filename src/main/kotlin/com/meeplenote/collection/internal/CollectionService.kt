@@ -31,6 +31,9 @@ data class CollectionItemResponse(
     val playCount: Int,
     val lastPlayedAt: LocalDate?,
     val isNoPlay: Boolean,
+    val minPlayers: Short?,
+    val maxPlayers: Short?,
+    val playtime: Short?,
 )
 
 data class CollectionCounts(val owned: Long, val wished: Long)
@@ -63,15 +66,35 @@ class CollectionService(
     }
 
     @Transactional(readOnly = true)
-    fun getCollections(userId: Long, status: CollectionStatus?, sort: CollectionSort): CollectionListResponse {
+    fun getCollections(
+        userId: Long,
+        status: CollectionStatus?,
+        sort: CollectionSort,
+        players: Int? = null,
+        maxPlaytime: Int? = null,
+    ): CollectionListResponse {
         val entities = findEntities(userId, status, sort)
         val gamesById = gameLookup.getSummaries(entities.map { it.gameId }).associateBy { it.id }
         val items = buildItems(entities, gamesById, sort)
+            .filter { matchesFilters(it, players, maxPlaytime) }
         val counts = CollectionCounts(
             owned = collectionRepository.countByUserIdAndStatus(userId, CollectionStatus.OWNED),
             wished = collectionRepository.countByUserIdAndStatus(userId, CollectionStatus.WISHED),
         )
         return CollectionListResponse(items = items, counts = counts)
+    }
+
+    private fun matchesFilters(item: CollectionItemResponse, players: Int?, maxPlaytime: Int?): Boolean {
+        if (players != null) {
+            val min = item.minPlayers ?: return false
+            val max = item.maxPlayers ?: return false
+            if (players < min || players > max) return false
+        }
+        if (maxPlaytime != null) {
+            val playtime = item.playtime ?: return false
+            if (playtime > maxPlaytime) return false
+        }
+        return true
     }
 
     private fun findEntities(userId: Long, status: CollectionStatus?, sort: CollectionSort): List<CollectionEntity> {
@@ -105,6 +128,9 @@ class CollectionService(
                 playCount = entity.playCount,
                 lastPlayedAt = entity.lastPlayedAt,
                 isNoPlay = entity.status == CollectionStatus.OWNED && entity.playCount == 0,
+                minPlayers = game?.minPlayers,
+                maxPlayers = game?.maxPlayers,
+                playtime = game?.playtime,
             )
         }
         return if (sort == CollectionSort.NAME) {

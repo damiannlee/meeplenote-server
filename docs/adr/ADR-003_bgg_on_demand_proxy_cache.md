@@ -21,3 +21,19 @@
 - (+) BGG 장애 시에도 기존 캐시 게임으로 기록 가능. (+) 저장 공간 최소.
 - (−) 최초 검색 유저는 콜드 미스 지연 경험 → 인기 게임 상위 N개는 시드 데이터로 선적재해 완화.
 - 한글명은 BGG에 없는 경우가 많음 → `name_ko`는 별도 매핑(수동 큐레이션 + 유저 제보)으로 채움. 이것이 이 서비스의 실질 자산이 된다.
+
+### 2026-07-18 업데이트 — 캐시 메타데이터 범위 확정 (BGG API use application 준비)
+
+기존 M8 구현(`feat/m8-bgg-cache`, 보류 중)은 `thing` 응답에서 이름·썸네일·인원수·플레이타임만 파싱했다. BGG API 정식 사용 신청을 준비하며 범위를 재검토, 아래 필드를 추가로 캐시 대상에 포함하기로 확정한다.
+
+**추가 필드**: `yearpublished`, `averageweight`(난이도), `boardgamecategory`/`boardgamemechanic`(link 태그), `boardgamedesigner`(link 태그), `average`/`bayesaverage`(BGG 평점, `stats=1` 파라미터 필요).
+
+**판정 근거** (1장 3원칙 + Won't 목록 대조):
+- `yearpublished`: 동명이작(리메이크·재발매) 게임 구분에 필요한 정확성 문제 — 저비용, 원칙 저촉 없음.
+- `averageweight`, `boardgamecategory`, `boardgamemechanic`: 컬렉션 필터 확장(S4의 인원수·플레이시간 필터와 동일선상)에 쓰일 정적 메타데이터 표시/필터 축 — 추천 로직이 아니므로 저촉 없음.
+- `boardgamedesigner`: 세 원칙 어디에도 강하게 기여하지 않는 단순 정보 표시. 우선순위는 낮으나 저비용이라 포함.
+- `average`/`bayesaverage`(평점): Won't 목록의 "취향 추천 엔진"·"공개 평점 시스템"과 경계가 가장 가까운 항목. **용도를 "내 컬렉션 정렬/필터 축 하나"로 한정**하는 조건으로 승인(2026-07-18, 사용자 확인). BGG가 이미 계산한 평점을 그대로 노출·정렬에 쓰는 것과, 유저 행동/평가를 학습해 새 게임을 추천하는 엔진은 다른 것으로 판단. **가드레일**: 유저별 개인화 가중치, "취향에 맞는 게임" 식의 추천 문구/로직으로 확장되는 순간 이 판정은 무효 — 그 시점엔 다시 Won't 목록 대조 필요.
+
+**미포함 (그대로 제외)**: `description`(페이로드 비대, 상세 조회 스코프 아님), `ratingcomments`/개별 유저 평점(공개 평점 시스템 Won't에 직접 저촉), `videos`, `boardgameexpansion` 등 관계형 링크(현재 어떤 기능도 소비하지 않음 — 필요해지면 별도 판단).
+
+이 확정에 맞춰 `BggGameDetail`(`BggClient.kt`)과 `GameEntity`/`GameCacheWriter`는 M8 재개 시점에 필드를 확장해야 한다(현재 `feat/m8-bgg-cache` 브랜치는 이름·썸네일·인원수·플레이타임만 보존된 상태).

@@ -1,26 +1,44 @@
 # CLAUDE.md — meeplenote-server
 
-> 이 파일은 1~5단계 산출물(문제정의/시장조사/기능명세/시스템설계/ADR/스캐폴드)을 구현 단계에서 즉시 참조 가능하도록 압축한 것이다. 전체 근거는 `docs/`(`problem_definition.md`, `02_market_research_competitor_analysis.md`, `03_mvp_feature_spec.md`, `04_system_design.md`, `docs/adr/`)를 참조하되, **여기 없는 내용을 원본 문서에서 찾아야 한다면 이 파일이 불완전한 것 — 발견 시 이 파일에 추가할 것.**
+> 1~5단계 산출물(문제정의/시장조사/기능명세/시스템설계/ADR/스캐폴드)을 구현 단계에서 즉시 참조 가능하도록 압축한 파일. 전체 근거는 `docs/`(`problem_definition.md`, `02_market_research_competitor_analysis.md`, `03_mvp_feature_spec.md`, `04_system_design.md`, `docs/adr/`) 참조 — **여기 없는 내용을 원본 문서에서 찾아야 한다면 이 파일이 불완전한 것, 발견 시 추가.**
+>
+> **모듈별 구현 상세는 이 파일이 아니라 `src/main/kotlin/com/meeplenote/{module}/CLAUDE.md`에** (auth/game/play/collection/stats/dataimport/export). 이 루트 파일은 전역 컨벤션·로드맵·ADR·현재 위치 요약만 유지. 모듈 `CLAUDE.md`를 쓸 때: 완결된 PR/커밋의 서사(버그 발견 경위, 구현 디테일)는 재서술하지 말고 PR 번호·커밋 해시로 가리키기만 할 것 — 실제로 남길 가치가 있는 건 **재발 위험 있는 활성 규칙**, **아직 열린 이슈/한계**, **다른 모듈이 참조하는 공개 인터페이스 요약**뿐.
+>
+> **CLAUDE.md류 문서 작성 규칙**: (1) 여러 파일에 공통되는 문장은 복붙하지 말고 상위 파일에 한 번만 쓸 것. (2) 기존 문서 내용을 옮기거나 재구성할 때는 그 내용이 지금도 사실인지 코드/git으로 재검증할 것 — 옛 문서를 그대로 베끼지 말 것. (3) PR/커밋에 이미 있는 서사는 포인터(PR 번호·커밋 해시)로 대체하고, 커밋에 없는 새 판단·활성 규칙만 남길 것. (4) 본문은 개조식(완전한 문장 대신 명사형 종결)으로 작성.
 
-## 0. 지금 상태 (2026-07-12 기준)
+## 0. 지금 상태 (2026-07-18 기준)
 
-- 5단계(스캐폴드) 완료: 모듈 패키지 구조, Flyway V1, CI, ArchUnit 경계 테스트까지 작성됨. **로컬 첫 빌드 검증 완료 (2026-07-11)** — `./gradlew test` BUILD SUCCESSFUL. 단, `build.gradle.kts`의 Testcontainers 의존성명이 `org.testcontainers:postgresql`/`junit-jupiter`에서 `testcontainers-postgresql`/`testcontainers-junit-jupiter`로 수정됨 (Spring Boot 4.1.0이 끌어오는 Testcontainers 2.x가 아티팩트명을 변경했기 때문, 1.x 라인은 1.21.3에서 종료).
-- ADR-009 (모듈 경계 강제 방식)는 Status: Accepted (2026-07-11 승인).
-- 서비스명 확정: 미플수첩 (meeplenote), 2026-07-11.
-- 페르소나 B 5~10명 인터뷰 **미실시** (n=1 자가응답만 근거). 개발과 별개로 진행 필요.
-- **6단계(구현) 진행 상황 (2026-07-12)**: M7(카카오 로그인+JWT) 완료·머지. M2(한글 게임 검색 — 초성/한글/영문, 로컬 DB 대상 + 커스텀 게임 등록) 완료·머지. **M8(BGG 온디맨드 캐시)는 보류** — 실제 BGG XML API2가 현재 Cloudflare 봇 차단으로 401을 반환해 무인증 온디맨드 조회가 성립하지 않음(`docs/adr/ADR-003` 구현 노트, `feat/m8-bgg-cache` 브랜치에 코드 보존). BGG 접근 문제 해결 전까지 게임 검색은 로컬 DB(직접 등록 게임)만 대상. **M1(`POST /api/v1/plays`) 완료·머지 (PR #3)** — 범위는 생성 API 하나(GET 목록/PATCH/DELETE는 다음 스토리). 구현 중 `game.api.GameLookup`(게임 존재 검증용 최소 공개 인터페이스) 신설. **버그 발견 및 수정**: `build.gradle.kts`의 `com.fasterxml.jackson.module:jackson-module-kotlin`(Jackson 2)이 Spring Boot 4.1의 기본 Jackson 3(`tools.jackson.*`)과 맞지 않아 Kotlin data class의 디폴트 파라미터(예: `players: List<PlayerInput> = emptyList()`)가 요청 바디에 없을 때 역직렬화가 깨지는 잠재 버그였음 — `tools.jackson.module:jackson-module-kotlin`으로 교체. 이전까지 이 버그가 안 드러난 이유는 기존 엔드포인트(M2/M7)가 전부 필수 필드만 썼기 때문. **M3(`PUT/DELETE /api/v1/collections/{gameId}`, `feat/m3-collection-management` 브랜치) 구현 완료, 머지 대기** — 범위는 보유/위시 추가·제거 두 엔드포인트뿐(`GET /api/v1/collections` 목록·정렬·카운트는 M4로 분리). `collection.api.CollectionLookup`(`isOwned`) 신설, `collection.internal.CollectionLookupService`가 구현하지만 아직 `play` 모듈에 배선하지 않음 — `play.internal.CollectionOwnershipChecker`는 여전히 `collections` 테이블을 native query로 직접 조회 중(주석을 TODO(M4)로 갱신, M4에서 이 클래스를 삭제하고 `PlayService`가 `CollectionLookup`을 직접 주입받도록 교체 예정). ADR-010(엔티티 식별자 BIGINT IDENTITY + FK 유지) 승인·기록 완료. **M4(기록↔컬렉션 자동 연동, 노플 배지, `feat/m4-play-collection-sync` 브랜치) 구현 완료** — `play.internal.CollectionOwnershipChecker`(native query 임시 구현)를 삭제하고 `PlayService`가 `collection.api.CollectionLookup`을 직접 주입받도록 교체(순환 의존 없이 play→collection 단방향 유지). 신규 `GET /api/v1/collections?status=&sort=`(정렬: name/recent_play/play_count) 구현, 응답에 `playCount`/`lastPlayedAt`/`isNoPlay` 포함. **설계 포인트**: `collection` 모듈이 `play.api`를 역참조하면 `ModuleBoundaryTest.noCyclesBetweenModules`가 깨지므로(play→collection 방향이 이미 존재), 플레이 횟수·최근 플레이일은 `collections` 테이블에 캐시 컬럼(`play_count`, `last_played_at`, V3 마이그레이션)으로 저장하고 `play` 모듈이 기록 저장 성공 시(멱등 재시도 제외) `collection.api.CollectionPlayTracker.recordPlay()`를 호출해 갱신하는 방식으로 구현 — collection 모듈은 자기 테이블만 읽는다. `game.api.GameLookup`에 `getSummaries`(배치 조회, N+1 방지)와 `GameSummary.thumbnailUrl` 추가. **코드 리뷰 후 수정 완료 (2026-07-13, PR #5 머지)**: (1) `CollectionLookupService.recordPlay`가 상태 무관하게 통계를 갱신하던 것을 최초엔 `status == OWNED`로 게이팅했으나, **사용자 피드백으로 다시 되돌림** — 위시리스트 게임도 (남의 것을 플레이해보는 등) 기록될 수 있어야 하고 `GET /api/v1/collections` 응답에 그 통계가 노출돼야 한다는 제품 판단에 따라 `recordPlay`는 상태 무관하게 항상 `playCount`/`lastPlayedAt`을 갱신한다. `isNoPlay`(노플 배지)만 여전히 `status == OWNED`일 때만 계산 — "보유 후 안 한 게임"이라는 배지 자체의 의미는 OWNED에 한정되지만, 플레이 통계 집계 자체는 소유 여부와 무관. (2) `PlayService.recordPlay`에서 `collectionPlayTracker.recordPlay()` 호출을 멱등성 재시도용 `catch (DataIntegrityViolationException)` 블록 밖으로 이동 — 컬렉션 쪽 쓰기 실패가 "중복 기록"으로 오인되어 조용히 삼켜지는 것을 방지. (3) `sort` 쿼리 파라미터를 서비스 레이어의 수동 문자열 파싱(`CollectionSort.fromQueryParam`, 삭제됨) 대신 `CollectionSortConverter`(Spring `Converter<String, CollectionSort>`) 기반 타입 바인딩으로 교체 — `status`와 동일한 검증 경로(`GlobalExceptionHandler.handleTypeMismatch`) 재사용. (4) `sort=name` 정렬이 `nameKo`가 없는 커스텀 게임(영문 전용)을 항상 맨 앞으로 보내던 버그 수정 — `nameEn` 폴백 추가. (5) `CollectionLookupServiceTest`/`CollectionSortConverterTest` 신규 작성. **알려진 한계 (의도적으로 남김)**: 컬렉션에 추가하기 전에 이미 기록한 플레이 이력은 `playCount`에 소급 반영되지 않는다 — `collection` 모듈이 `play.api`를 조회하면 `ModuleBoundaryTest.noCyclesBetweenModules`가 깨지므로(play→collection 방향이 이미 존재) 역방향 조회로 백필하는 구조를 만들 수 없다. US-2.2 원문("보유 후 한 번도 기록이 없는 게임")도 "보유 시점 이후" 플레이만을 대상으로 하므로 현재 동작(추가/재추가 시 0부터 시작)이 스펙과 일치한다고 판단, 별도 이슈로 남기지 않음. **M5(기본 통계, `GET /api/v1/stats/summary`, `feat/m5-stats` 브랜치) 구현 완료** — `collections.play_count`/`last_played_at` 캐시는 재사용하지 않기로 판단: 컬렉션에 추가된 적 없는 게임의 플레이가 캐시에서 누락되므로(위 "알려진 한계" 참조) `totalPlays`/`topGames`/`monthlyTrend`는 `plays` 테이블을 직접 GROUP BY 집계(신규 `play.api.PlayStatsProvider`)해 구하고, `noPlayCount`만 M4 규칙(OWNED && playCount==0)을 그대로 재사용해 `collection.api.CollectionLookup.countNoPlay()`로 노출. `monthlyTrend`는 시스템 설계 문서의 `?year=` 쿼리 예시와 기능명세의 "최근 12개월" 인수조건이 불일치해 사용자 확인 후 **쿼리 파라미터 없이 항상 최근 12개월 롤링**으로 확정(연도 경계와 무관하게 항상 12칸 응답, 데이터 없는 달은 0). top5는 `play` 모듈에서 gameId+count만 뽑고 게임명은 `game.api.GameLookup.getSummaries()` 배치 조회로 `stats` 모듈에서 붙여 N+1 방지. 의존 방향 `stats → play.api/collection.api/game.api` 신규 추가, 역방향 없어 `ModuleBoundaryTest.noCyclesBetweenModules` 통과 확인. `PlayRepository`에 `GameRepository`와 동일한 네이티브 쿼리+`LIMIT :limit` 파라미터 컨벤션(Pageable 미사용)으로 집계 쿼리 추가. **M6(BG Stats 파일 임포트, US-4.1, `feat/m6-bgstats-import` 브랜치) 구현 완료** — BGG 소스 임포트(`source: "bgg"`)는 M8과 동일한 사유(BGG XML API2가 Cloudflare 봇 차단으로 401)로 이번 슬라이스에서 제외, BG Stats 파일 업로드만 구현. 실제 BG Stats 내보내기 JSON 스키마 문서가 비공개(공식 페이지 403)라 공개 GitHub 파서(`TalitaJames/bgStats-dataVisualiser`)의 파싱 코드를 역추적해 스키마(`games[{id,bggId,name}]`/`players[{id,name}]`/`plays[{uuid,gameRefId,playDate:"yyyy-MM-dd HH:mm:ss",ignored,playerScores[{playerRefId,score,winner}]}]`)를 확정 — 실물 샘플로 검증한 것은 아니라 첫 실제 파일 유입 시 재검증 필요. `POST /api/v1/imports`(multipart, 422 UNSUPPORTED_FILE_FORMAT/409 IMPORT_ALREADY_RUNNING), `GET /api/v1/imports/{jobId}`(폴링), `POST /api/v1/imports/{jobId}/resolve` 구현. 매칭은 `games.bgg_id` 정확 매칭 우선, 실패 시 이름 정확 일치, 그마저 실패하면 unmatched로 분류해 후보 3개와 함께 반환 — 이를 위해 `game.api.GameLookup`에 `findByBggId`/`findCandidatesByName` 추가. 중복 병합은 (gameId, playedAt, 플레이어 이름 집합) 동일 시 스킵. `play.api`에 `PlayBulkImporter` 신설(배치 임포트 전용 진입점, 기존 `POST /api/v1/plays`의 Idempotency-Key 경로와 별개) — `PlayService`의 플레이어 이름 해석 로직을 `PlayerNameResolver`로 추출해 재사용. 잡 처리는 `@Async`(전용 `ImportAsyncConfig`/`importTaskExecutor` 신설, ADR-005). **버그 발견 및 수정**: 초기 구현에서 async 처리 메서드(`process`)가 자신의 `@Transactional` 메서드(`runImport`)를 `this.runImport(...)`로 직접 호출하는 self-invocation 구조였음 — Spring AOP 프록시는 self-invocation을 가로채지 못해 `@Transactional`이 조용히 무시되는 문제(트랜잭션 경계가 전혀 안 걸림). `@Transactional` 제거하고 개별 `save()`/`playBulkImporter.importPlay()` 호출이 각자 커밋되는 구조로 변경 — 이 덕분에 job row가 `submit()`에서 커밋된 뒤에만 async 스레드가 조회하고(레이스 방지), 폴링 중 RUNNING 상태도 중간에 보인다(둘 다 하나의 큰 트랜잭션이었다면 불가능). 타 유저의 임포트 잡 접근은 기존 컨벤션(`PlayService.validateOwnership`)대로 403이 아닌 404로 통일. **제외 범위**: BGG 소스 임포트(M8 해제 후 별도 스토리), `import_jobs.raw_payload` 90일 정리 배치잡(Could), `GET /api/v1/exports`(US-4.2, 별도 스토리 — 로드맵 표의 M7 "계정·백업" 행에 이름만 있고 실제 M7 구현 범위엔 없었던 항목). 남은 Must 항목은 BGG 의존(M6 BGG분/M8) 해제 대기와 exports 엔드포인트뿐. **US-4.2 데이터 내보내기(`GET /api/v1/exports`, `feat/us-4.2-data-export` 브랜치) 구현 완료** — 신규 `export` 모듈 생성(ADR-001의 6개 모듈 목록은 "MSA vs 모놀리스" 재검토 트리거이지 모듈 개수 고정 조건이 아니므로 신규 모듈 추가는 ADR 뒤집기가 아니라고 판단; `dataimport`는 BG Stats 비동기 잡 처리에 집중된 모듈이라 동기식 읽기 전용 export와 성격이 달라 분리). `export → play.api/collection.api/game.api/auth.api` 단방향 의존만 추가, `ModuleBoundaryTest` 통과 확인. `03_mvp_feature_spec.md`의 "JSON/CSV" 인수조건과 `04_system_design.md`의 "JSON 스트리밍" 계약이 불일치해 사용자 확인 후 **JSON만, 스트리밍 아닌 일반 응답**으로 확정(트래픽 규모에서 `StreamingResponseBody`는 과설계, ADR-002 정신과 일치) — `04_system_design.md` §5 계약 문구도 함께 수정. `play.api.PlayExportProvider`(신규, 유저 전체 플레이+플레이어 배치 조회)와 `collection.api.CollectionLookup.getAllForUser`(신규) 추가, `game.api.GameLookup.getSummaries()`로 플레이+컬렉션의 gameId를 합쳐 한 번에 배치 조회해 게임명 부여(N+1 방지). **제외 범위**: CSV 포맷(별도 스토리로 남김).
+- 5단계(스캐폴드) 완료, 로컬 첫 빌드 검증 완료(2026-07-11, `./gradlew test` BUILD SUCCESSFUL). Testcontainers 의존성명이 Spring Boot 4.1.0의 Testcontainers 2.x 아티팩트명 변경으로 `org.testcontainers:*` → `testcontainers-*` 로 수정됨(`build.gradle.kts`).
+- 서비스명 확정: 미플수첩 (meeplenote).
+- 페르소나 B 5~10명 인터뷰 **미실시** (n=1 자가응답만 근거) — 개발과 별개로 진행 필요.
+- 아래 표는 로드맵(§2) 대비 현재 위치 요약. 모듈별 상세는 "상세" 열의 `CLAUDE.md` 참조.
+
+| # | 기능 | 상태 | 상세 |
+|---|---|---|---|
+| M1 | 10초 플레이 기록 | 완료 (PR #3) | `play/CLAUDE.md` |
+| M2 | 한글 게임 검색 | 완료 | `game/CLAUDE.md` |
+| M3 | 컬렉션 관리 (보유/위시) | 완료 (PR #4) | `collection/CLAUDE.md` |
+| M4 | 기록↔컬렉션 자동 연동 | 완료 (PR #5, #6) | `collection/CLAUDE.md` |
+| M5 | 기본 통계 4종 | 완료 (PR #7) | `stats/CLAUDE.md` |
+| M6 | 데이터 임포트 | BG Stats만 완료 (PR #8), BGG 소스는 보류 | `dataimport/CLAUDE.md` |
+| M7 | 계정·백업 (카카오+JWT) | 완료 | `auth/CLAUDE.md` |
+| M8 | 게임 DB (BGG 온디맨드 캐시) | **보류** — BGG XML API2가 Cloudflare 봇 차단으로 401. 정식 API 사용 신청 준비 중(2026-07-18) | `game/CLAUDE.md`, ADR-003 |
+| US-4.2 | 데이터 내보내기 | 완료 (PR #9), JSON만(CSV 제외) | `export/CLAUDE.md` |
+| S4 | 컬렉션 필터 (인원수·플레이시간) | 완료 (PR #10/#11) — Should 항목이지만 BGG 미의존이라 먼저 처리 | `collection/CLAUDE.md` |
+
+**남은 Must 항목은 BGG 의존(M6의 BGG 소스 임포트, M8) 해제 대기뿐.**
 
 ## 1. 이 프로젝트가 아닌 것 (매 기능 제안마다 먼저 대조할 것)
 
 **Won't (3단계에서 확정, 경계 재확인 없이 재논의 금지):**
 룰 요약/AI Q&A, 모임 매칭, 커뮤니티(피드·댓글), 취향 추천 엔진, BGG 양방향 동기화, 공개 평점 시스템, 가격 정책 확정(인터뷰 전까지 완전 무료).
 
-기능이 하나라도 다음 중 "아니오"면 Should 이하로 강등한다 (3단계 설계 원칙):
+기능이 하나라도 다음 중 "아니오"면 Should 이하로 강등 (3단계 설계 원칙):
 1. 기록 루프(플레이 종료→10초 기록→컬렉션/통계 자동 갱신)에 기여하는가
 2. BG Stats/BGG/메모앱에서 넘어오는 전환 장벽을 낮추는가
 3. 다른 유저가 0명이어도 혼자서 가치가 있는가 (콜드스타트 회피)
 
-새 기능 제안이 들어오면 위 3원칙 통과 여부와 Won't 목록 저촉 여부를 먼저 판정하고, 애매하면 구현 전에 사용자(민석)에게 확인한다 — **로드맵이 요구하는 "쳐내는 역할"은 6단계에서도 유지.**
+새 기능 제안 시 위 3원칙 통과 여부와 Won't 목록 저촉 여부 먼저 판정, 애매하면 구현 전 사용자(민석) 확인 — **로드맵이 요구하는 "쳐내는 역할"은 6단계에서도 유지.**
 
 ## 2. MVP 범위 (3단계 MoSCoW — Must 8개, 이번 릴리스 전부)
 
@@ -35,7 +53,7 @@
 | M7 | 계정·백업 (소셜 로그인 1종) | `auth` — 카카오, JWT |
 | M8 | 게임 DB (BGG 온디맨드 캐시) | `game` |
 
-구현 순서 권장: **M7(인증) → M2/M8(게임 검색·캐시) → M1(기록) → M3/M4(컬렉션 연동) → M5(통계) → M6(임포트)**. 근거: M1이 게임 선택을 전제하므로 검색이 먼저, 인증 없이는 어떤 API도 유저 스코프를 못 가짐. M6은 가장 복잡하고(비동기 잡, 매칭) 다른 모듈에 의존하므로 마지막.
+구현 순서 권장: **M7(인증) → M2/M8(게임 검색·캐시) → M1(기록) → M3/M4(컬렉션 연동) → M5(통계) → M6(임포트)**. 근거: M1은 게임 선택 전제라 검색 먼저, 인증 없이는 API가 유저 스코프 못 가짐. M6은 가장 복잡(비동기 잡, 매칭)하고 타 모듈 의존이라 마지막.
 
 ## 3. 비기능 요구사항 (설계 §1)
 
@@ -82,10 +100,10 @@
 
 ## 8. 코드 스타일 & 컨벤션 (Kotlin)
 
-> meetjyou-backend(동일 스택: Kotlin + Spring Boot + JPA)에서 이식. 코드베이스가 아직 작을 때(현재 auth 모듈만 구현) 규칙화해서 M1~M6 진행 중 어긋나지 않게 한다.
+> meetjyou-backend(동일 스택: Kotlin + Spring Boot + JPA)에서 이식. 코드베이스가 작을 때(당시 auth 모듈만 구현) 규칙화 — M1~M6 진행 중 어긋남 방지 목적.
 
 - **Null safety**: `?: throw` Elvis 연산자만 사용. `!!`, `requireNotNull()`, `if (x == null) throw` 금지.
-- **DTO 변환**: 서비스가 companion `.of()` 팩토리로 DTO를 리턴한다. 컨트롤러는 `.of()`를 직접 호출하지 않는다.
+- **DTO 변환**: 서비스가 companion `.of()` 팩토리로 DTO 리턴. 컨트롤러는 `.of()` 직접 호출 금지.
 - **메서드 길이**: 함수 바디 30줄 하드캡. 넘으면 `validateXxx`/`buildXxx`/`resolveXxx` 이름의 private 헬퍼로 추출.
 - **N+1 방지**: 반복문 안에서 레포지토리 호출 금지. `findAllByXxxIn(ids)` + `groupBy`/`associateBy`로 배치 로딩. (M5 통계, M6 임포트에서 특히 중요)
 - **`@Transactional`**: 읽기 전용 메서드는 `@Transactional(readOnly = true)`, 쓰기 메서드는 `@Transactional`.
@@ -93,7 +111,7 @@
 - **문자열 결합**: `+` 연산자 대신 템플릿 리터럴만.
 - **import**: wildcard import 금지.
 - **주석/로그**: 코드 내 주석과 로그 메시지는 영어. (`docs/`, ADR, 이 파일 등 문서는 한글 유지 — 이 규칙은 코드에만 적용)
-- **현재 유저 접근**: M1(기록)/M3(컬렉션)/M5(통계)처럼 유저 스코프가 필요한 모듈에서 `SecurityContext`를 직접 파고들지 말 것. auth 모듈에 `CurrentUserProvider` 같은 단일 접근점을 만들어 재사용 (아직 미구현 — 두 번째로 유저 스코프가 필요한 모듈을 만들 때 도입할 것).
+- **현재 유저 접근**: 유저 스코프가 필요한 모듈에서 `SecurityContext`를 직접 파고들지 말 것. `auth.api.CurrentUserProvider`(M2 시점에 도입 완료, 전 모듈 컨트롤러가 이미 사용 중)를 주입받아 쓸 것.
 
 ## 9. 작업 사이클 (로드맵 6단계 그대로 적용)
 
@@ -106,7 +124,7 @@
 
 ## 10. 페르소나 (기억할 것 — 기능 판단의 최종 기준)
 
-**페르소나 B "기록 덕후" 이서연 (28)**가 1차 타겟. 컬렉션 40종, BG Stats를 영어·유료·한글검색 약함으로 방치 중. 전환 조건은 "무료+한글+10초 기록". **리스크: 초반 3주 이탈** — 이 문서에서 나오는 여러 설계(첫 기록 유도 화면, 임포트로 통계 즉시 채우기)가 전부 이 리스크 대응이다. 새 기능이 이 사람의 이탈 리스크를 줄이는지 늘리는지로 판단할 것.
+**페르소나 B "기록 덕후" 이서연 (28)**가 1차 타겟. 컬렉션 40종, BG Stats를 영어·유료·한글검색 약함으로 방치 중. 전환 조건은 "무료+한글+10초 기록". **리스크: 초반 3주 이탈** — 이 문서의 여러 설계(첫 기록 유도 화면, 임포트로 통계 즉시 채우기) 전부 이 리스크 대응. 새 기능은 이 사람의 이탈 리스크 증감 여부로 판단할 것.
 
 ## 11. Compact Instructions
 

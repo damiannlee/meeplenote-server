@@ -1,0 +1,106 @@
+### 로컬 dev 환경 완료 기능 수동 테스트 시나리오 (IntelliJ HTTP Client)
+#
+# 사전 준비:
+#   1. docker compose up -d
+#   2. ./gradlew bootRun --args='--spring.profiles.active=local,dev-seed'
+#      (dev-seed 프로필을 켜야 dev-login과 게임 카탈로그 시드가 활성화됨 — 기본 실행에는 없음)
+#
+# 아래 요청을 위에서부터 순서대로 실행할 것. 응답 캡처 스크립트가 accessToken 등을
+# client.global 변수에 저장해 다음 요청이 자동으로 사용한다.
+
+@host = http://localhost:8080
+
+### 1. dev 로그인 (dev-seed 프로필 전용, 카카오 토큰 불필요)
+POST {{host}}/api/v1/auth/dev-login
+
+> {%
+    client.global.set("accessToken", response.body.accessToken);
+%}
+
+### 2. 게임 검색 — 한글
+GET {{host}}/api/v1/games?q=카탄
+Authorization: Bearer {{accessToken}}
+
+> {%
+    client.global.set("catanGameId", response.body.items[0].id);
+%}
+
+### 3. 게임 검색 — 초성 (예: 스플렌더 → ㅅㅍㄹㄷ)
+GET {{host}}/api/v1/games?q=ㅅㅍㄹㄷ
+Authorization: Bearer {{accessToken}}
+
+### 4. 커스텀 게임 등록 (시드 카탈로그에 없는 게임 직접 등록)
+POST {{host}}/api/v1/games
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "나만의 보드게임"
+}
+
+### 5. 컬렉션에 보유 등록 (카탄)
+PUT {{host}}/api/v1/collections/{{catanGameId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "status": "OWNED"
+}
+
+### 6. 컬렉션 목록 조회 (인원수·플레이시간 필터 — S4)
+GET {{host}}/api/v1/collections?status=OWNED&sort=recent_play&players=4&maxPlaytime=60
+Authorization: Bearer {{accessToken}}
+
+### 7. 10초 플레이 기록 (카탄) — 응답의 totalPlayCountForGame / suggestAddToCollection(노플 배지) 확인
+POST {{host}}/api/v1/plays
+Authorization: Bearer {{accessToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{
+  "gameId": {{catanGameId}},
+  "players": [
+    { "name": "민석", "isWinner": true },
+    { "name": "친구1" }
+  ],
+  "rating": 5
+}
+
+### 8. 통계 요약 (M5)
+GET {{host}}/api/v1/stats/summary
+Authorization: Bearer {{accessToken}}
+
+### 9. 데이터 내보내기 (US-4.2)
+GET {{host}}/api/v1/exports
+Authorization: Bearer {{accessToken}}
+
+### 10. BG Stats 임포트 (멀티파트) — docs/fixtures/bgstats-sample.json 사용
+POST {{host}}/api/v1/imports
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="bgstats-sample.json"
+Content-Type: application/json
+
+< ./fixtures/bgstats-sample.json
+--WebAppBoundary--
+
+> {%
+    client.global.set("importJobId", response.body.jobId);
+%}
+
+### 11. 임포트 잡 상태 폴링 (비동기 202 → 완료까지 반복 실행)
+GET {{host}}/api/v1/imports/{{importJobId}}
+Authorization: Bearer {{accessToken}}
+
+### 12. 임포트 매칭 실패 수동 해결 (10번 응답의 summary.unmatched가 있을 때만 필요, gameId는 2번 검색 결과 등으로 대체)
+POST {{host}}/api/v1/imports/{{importJobId}}/resolve
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "resolutions": [
+    { "unmatchedName": "Catan", "gameId": {{catanGameId}} }
+  ]
+}

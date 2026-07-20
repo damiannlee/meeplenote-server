@@ -43,6 +43,21 @@ class AuthService(
         return SocialLoginResult(accessToken, refreshToken, isNewUser = existing == null)
     }
 
+    /** Local-manual-testing only entry point — invoked exclusively by [DevAuthController] (`dev-seed` profile), never reachable via Kakao's real login path. */
+    @Transactional
+    fun devLogin(nickname: String): SocialLoginResult {
+        val providerId = "dev-local-user"
+        val existing = userRepository.findByProviderAndProviderId(AuthProvider.KAKAO, providerId)
+        val user = existing ?: userRepository.save(
+            UserEntity(provider = AuthProvider.KAKAO, providerId = providerId, nickname = nickname),
+        )
+
+        val accessToken = jwtTokenProvider.createAccessToken(user.id)
+        val refreshToken = issueRefreshToken(user.id)
+
+        return SocialLoginResult(accessToken, refreshToken, isNewUser = existing == null)
+    }
+
     @Transactional
     fun refreshAccessToken(refreshToken: String): String {
         val stored = refreshTokenRepository.findByTokenHash(hash(refreshToken))

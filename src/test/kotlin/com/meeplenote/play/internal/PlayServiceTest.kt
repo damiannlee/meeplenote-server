@@ -242,4 +242,74 @@ class PlayServiceTest {
         assertThat(response.totalPlayCountForGame).isEqualTo(5)
         verify(playRepository).countByUserIdAndGameId(userId, gameId)
     }
+
+    @Test
+    fun `커서 없이 조회하면 첫 페이지 쿼리를 쓰고 limit 이하 결과면 nextCursor가 없다`() {
+        val plays = listOf(PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now()))
+        whenever(playRepository.findFirstPageByUserId(userId, 21)).thenReturn(plays)
+        whenever(gameLookup.getSummaries(listOf(gameId))).thenReturn(listOf(GameSummary(gameId, "카탄", null, null)))
+
+        val response = playService.listPlays(userId, cursor = null, limit = 20)
+
+        assertThat(response.items).hasSize(1)
+        assertThat(response.nextCursor).isNull()
+        verify(playRepository, never()).findNextPageByUserId(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `결과가 limit을 초과하면 items는 limit개만 반환하고 nextCursor를 채운다`() {
+        val plays = (1..3).map { PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now().minusDays(it.toLong())) }
+        whenever(playRepository.findFirstPageByUserId(userId, 3)).thenReturn(plays)
+        whenever(gameLookup.getSummaries(listOf(gameId))).thenReturn(listOf(GameSummary(gameId, "카탄", null, null)))
+
+        val response = playService.listPlays(userId, cursor = null, limit = 2)
+
+        assertThat(response.items).hasSize(2)
+        assertThat(response.nextCursor).isNotNull()
+    }
+
+    @Test
+    fun `커서가 있으면 다음 페이지 쿼리에 디코딩된 날짜와 id를 넘긴다`() {
+        val cursorPlayedAt = LocalDate.now().minusDays(3)
+        val cursorId = 42L
+        val cursor = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString("${cursorPlayedAt}_$cursorId".toByteArray())
+        whenever(playRepository.findNextPageByUserId(userId, cursorPlayedAt, cursorId, 21)).thenReturn(emptyList())
+
+        playService.listPlays(userId, cursor = cursor, limit = 20)
+
+        verify(playRepository).findNextPageByUserId(userId, cursorPlayedAt, cursorId, 21)
+        verify(playRepository, never()).findFirstPageByUserId(any(), any())
+    }
+
+    @Test
+    fun `잘못된 형식의 커서는 INVALID_CURSOR를 던진다`() {
+        val ex = assertThrows<BusinessException> { playService.listPlays(userId, cursor = "not-a-valid-cursor", limit = 20) }
+
+        assertThat(ex.code).isEqualTo("INVALID_CURSOR")
+    }
+
+    @Test
+    fun `같은 게임의 플레이가 여러 건이어도 게임 조회는 distinct id로 한 번만 배치 호출한다`() {
+        val plays = listOf(
+            PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now()),
+            PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now().minusDays(1)),
+        )
+        whenever(playRepository.findFirstPageByUserId(userId, 21)).thenReturn(plays)
+        whenever(gameLookup.getSummaries(listOf(gameId))).thenReturn(listOf(GameSummary(gameId, "카탄", null, null)))
+
+        playService.listPlays(userId, cursor = null, limit = 20)
+
+        verify(gameLookup, org.mockito.kotlin.times(1)).getSummaries(listOf(gameId))
+    }
+
+    @Test
+    fun `게임명은 nameKo가 없으면 nameEn을 쓴다`() {
+        val plays = listOf(PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.now()))
+        whenever(playRepository.findFirstPageByUserId(userId, 21)).thenReturn(plays)
+        whenever(gameLookup.getSummaries(listOf(gameId))).thenReturn(listOf(GameSummary(gameId, null, "Catan", null)))
+
+        val response = playService.listPlays(userId, cursor = null, limit = 20)
+
+        assertThat(response.items.single().gameName).isEqualTo("Catan")
+    }
 }

@@ -364,4 +364,110 @@ class PlayControllerIntegrationTest {
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.error.code").value("PLAYER_NOT_FOUND"))
     }
+
+    @Test
+    fun `목록을 조회하면 게임명과 썸네일이 포함된 최신순 기록을 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1014)
+        val gameId = registerGame(accessToken, "엘 그란데")
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId}"""),
+        ).andExpect(status().isCreated)
+
+        mockMvc.perform(
+            get("/api/v1/plays")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items[0].gameId").value(gameId))
+            .andExpect(jsonPath("$.items[0].gameName").value("엘 그란데"))
+            .andExpect(jsonPath("$.nextCursor").doesNotExist())
+    }
+
+    @Test
+    fun `limit보다 기록이 많으면 nextCursor로 다음 페이지를 이어서 조회할 수 있다`() {
+        val accessToken = issueAccessToken(kakaoId = 1015)
+        val gameId = registerGame(accessToken, "칸반")
+        repeat(3) {
+            mockMvc.perform(
+                post("/api/v1/plays")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("Authorization", "Bearer $accessToken")
+                    .header("Idempotency-Key", UUID.randomUUID().toString())
+                    .content("""{"gameId": $gameId, "playedAt": "${LocalDate.now().minusDays(it.toLong())}"}"""),
+            ).andExpect(status().isCreated)
+        }
+
+        val firstPage = mockMvc.perform(
+            get("/api/v1/plays?limit=2")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andReturn().response.contentAsString
+        val nextCursor = JsonPath.read<String>(firstPage, "$.nextCursor")
+
+        mockMvc.perform(
+            get("/api/v1/plays?limit=2&cursor=$nextCursor")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.nextCursor").doesNotExist())
+    }
+
+    @Test
+    fun `타 유저의 기록은 목록에 노출되지 않는다`() {
+        val accessTokenA = issueAccessToken(kakaoId = 1016, nickname = "userC")
+        val gameIdA = registerGame(accessTokenA, "루나")
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessTokenA")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameIdA}"""),
+        ).andExpect(status().isCreated)
+
+        val accessTokenB = issueAccessToken(kakaoId = 1017, nickname = "userD")
+
+        mockMvc.perform(
+            get("/api/v1/plays")
+                .header("Authorization", "Bearer $accessTokenB"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(0))
+    }
+
+    @Test
+    fun `인증 없이 목록을 조회하면 401을 반환한다`() {
+        mockMvc.perform(get("/api/v1/plays")).andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `limit이 50을 초과하면 400 INVALID_PARAMETER를 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1018)
+
+        mockMvc.perform(
+            get("/api/v1/plays?limit=51")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.error.code").value("INVALID_PARAMETER"))
+    }
+
+    @Test
+    fun `잘못된 형식의 cursor면 400 INVALID_CURSOR를 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1019)
+
+        mockMvc.perform(
+            get("/api/v1/plays?cursor=not-a-valid-cursor")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.error.code").value("INVALID_CURSOR"))
+    }
 }

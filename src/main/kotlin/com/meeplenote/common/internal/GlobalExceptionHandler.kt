@@ -2,6 +2,7 @@ package com.meeplenote.common.internal
 
 import com.meeplenote.common.api.BusinessException
 import com.meeplenote.common.api.ErrorResponse
+import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -51,6 +52,14 @@ class GlobalExceptionHandler {
     fun handleMissingHeader(ex: MissingRequestHeaderException): ResponseEntity<ErrorResponse> =
         ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(ErrorResponse.of("MISSING_HEADER", "필수 헤더가 누락되었습니다: ${ex.headerName}"))
+
+    /** @Validated 컨트롤러의 @RequestParam 제약(@Min/@Max 등) 위반 — @Valid @RequestBody(MethodArgumentNotValidException)와 경로가 다름 */
+    @ExceptionHandler(ConstraintViolationException::class)
+    fun handleConstraintViolation(ex: ConstraintViolationException): ResponseEntity<ErrorResponse> {
+        val detail = ex.constraintViolations.associate { it.propertyPath.toString() to it.message }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(ErrorResponse.of("INVALID_PARAMETER", "파라미터 값이 올바르지 않습니다", detail))
+    }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException::class)
     fun handleTypeMismatch(ex: MethodArgumentTypeMismatchException): ResponseEntity<ErrorResponse> =

@@ -4,11 +4,13 @@ import com.meeplenote.collection.api.CollectionLookup
 import com.meeplenote.collection.api.CollectionPlayTracker
 import com.meeplenote.common.api.BusinessException
 import com.meeplenote.game.api.GameLookup
+import com.meeplenote.game.api.GameSummary
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
+import java.util.Base64
 import java.util.UUID
 
 data class PlayResponse(
@@ -29,6 +31,30 @@ data class PlayResponse(
             )
     }
 }
+
+data class PlayListItemResponse(
+    val id: Long,
+    val gameId: Long,
+    val gameName: String,
+    val thumbnailUrl: String?,
+    val playedAt: LocalDate,
+) {
+    companion object {
+        fun of(entity: PlayEntity, game: GameSummary?) =
+            PlayListItemResponse(
+                id = entity.id,
+                gameId = entity.gameId,
+                gameName = game?.nameKo ?: game?.nameEn ?: "",
+                thumbnailUrl = game?.thumbnailUrl,
+                playedAt = entity.playedAt,
+            )
+    }
+}
+
+data class PlayListResponse(
+    val items: List<PlayListItemResponse>,
+    val nextCursor: String?,
+)
 
 @Service
 class PlayService(
@@ -125,4 +151,33 @@ class PlayService(
         val suggestAddToCollection = !collectionLookup.isOwned(userId, play.gameId)
         return PlayResponse.of(play, totalPlayCount, suggestAddToCollection)
     }
+
+    @Transactional(readOnly = true)
+    fun listPlays(userId: Long, cursor: String?, limit: Int): PlayListResponse {
+        val rows = fetchPage(userId, cursor, limit)
+        val page = rows.take(limit)
+        val gamesById = gameLookup.getSummaries(page.map { it.gameId }.distinct()).associateBy { it.id }
+        val items = page.map { PlayListItemResponse.of(it, gamesById[it.gameId]) }
+        val nextCursor = if (rows.size > limit) encodeCursor(page.last()) else null
+        return PlayListResponse(items, nextCursor)
+    }
+
+    private fun fetchPage(userId: Long, cursor: String?, limit: Int): List<PlayEntity> {
+        if (cursor == null) return playRepository.findFirstPageByUserId(userId, limit + 1)
+        val (cursorPlayedAt, cursorId) = decodeCursor(cursor)
+        return playRepository.findNextPageByUserId(userId, cursorPlayedAt, cursorId, limit + 1)
+    }
+
+    private fun encodeCursor(entity: PlayEntity): String =
+        Base64.getUrlEncoder().withoutPadding().encodeToString("${entity.playedAt}_${entity.id}".toByteArray())
+
+    private fun decodeCursor(cursor: String): Pair<LocalDate, Long> {
+        val decoded = runCatching { String(Base64.getUrlDecoder().decode(cursor)) }
+            .getOrElse { throw invalidCursorException() }
+        val (playedAt, id) = decoded.split("_").takeIf { it.size == 2 } ?: throw invalidCursorException()
+        return runCatching { LocalDate.parse(playedAt) to id.toLong() }.getOrElse { throw invalidCursorException() }
+    }
+
+    private fun invalidCursorException() =
+        BusinessException("INVALID_CURSOR", "유효하지 않은 커서입니다", HttpStatus.BAD_REQUEST)
 }

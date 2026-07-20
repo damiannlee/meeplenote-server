@@ -48,4 +48,32 @@ interface PlayRepository : JpaRepository<PlayEntity, Long> {
         nativeQuery = true,
     )
     fun findTopGamesByPlayCount(@Param("userId") userId: Long, @Param("limit") limit: Int): List<GamePlayCountRow>
+
+    @Query(
+        value = """
+            SELECT * FROM plays
+            WHERE user_id = :userId
+            ORDER BY played_at DESC, id DESC
+            LIMIT :limit
+        """,
+        nativeQuery = true,
+    )
+    fun findFirstPageByUserId(@Param("userId") userId: Long, @Param("limit") limit: Int): List<PlayEntity>
+
+    @Query(
+        value = """
+            SELECT * FROM plays
+            WHERE user_id = :userId
+              AND (played_at < :cursorPlayedAt OR (played_at = :cursorPlayedAt AND id < :cursorId))
+            ORDER BY played_at DESC, id DESC
+            LIMIT :limit
+        """,
+        nativeQuery = true,
+    )
+    fun findNextPageByUserId(
+        @Param("userId") userId: Long,
+        @Param("cursorPlayedAt") cursorPlayedAt: LocalDate,
+        @Param("cursorId") cursorId: Long,
+        @Param("limit") limit: Int,
+    ): List<PlayEntity>
 }

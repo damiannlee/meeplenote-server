@@ -9,10 +9,13 @@ import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.validation.annotation.Validated
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.time.LocalDate
 import java.util.UUID
@@ -44,6 +47,7 @@ data class CreatePlayRequest(
     val photoKey: String? = null,
 )
 
+@Validated
 @RestController
 @RequestMapping("/api/v1/plays")
 class PlayController(
@@ -59,4 +63,11 @@ class PlayController(
         val response = playService.recordPlay(currentUserProvider.currentUserId(), idempotencyKey, request)
         return ResponseEntity.status(HttpStatus.CREATED).body(response)
     }
+
+    @GetMapping
+    fun list(
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(50) limit: Int,
+    ): PlayListResponse =
+        playService.listPlays(currentUserProvider.currentUserId(), cursor, limit)
 }

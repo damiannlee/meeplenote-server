@@ -1,0 +1,13 @@
+{
+  "games": [{"id": 1, "bggId": 13, "name": "Catan"}],
+  "players": [{"id": 1, "name": "테스트플레이어"}],
+  "plays": [
+    {
+      "uuid": "seed-play-1",
+      "gameRefId": 1,
+      "playDate": "2026-07-15 10:00:00",
+      "ignored": false,
+      "playerScores": [{"playerRefId": 1, "score": 10, "winner": true}]
+    }
+  ]
+}

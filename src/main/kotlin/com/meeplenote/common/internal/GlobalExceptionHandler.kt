@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.multipart.support.MissingServletRequestPartException
+import org.springframework.web.servlet.resource.NoResourceFoundException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -55,6 +56,12 @@ class GlobalExceptionHandler {
     fun handleTypeMismatch(ex: MethodArgumentTypeMismatchException): ResponseEntity<ErrorResponse> =
         ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(ErrorResponse.of("INVALID_PARAMETER", "파라미터 형식이 올바르지 않습니다: ${ex.name}"))
+
+    /** 매핑된 핸들러가 없는 경로 — 기본값으로는 static resource 처리로 흘러가 Exception 캐치올(500)로 잘못 떨어진다 */
+    @ExceptionHandler(NoResourceFoundException::class)
+    fun handleNoResourceFound(ex: NoResourceFoundException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(ErrorResponse.of("NOT_FOUND", "요청한 경로를 찾을 수 없습니다"))
 
     @ExceptionHandler(Exception::class)
     fun handleUnexpected(ex: Exception): ResponseEntity<ErrorResponse> {

@@ -15,3 +15,5 @@
 | [ADR-008](ADR-008_client_stack_flutter_finalized.md) | 클라이언트 스택 — Flutter 확정 | Accepted |
 | [ADR-009](ADR-009_module_boundary_enforcement.md) | 모듈 경계 — 패키지 규약 + ArchUnit | Accepted |
 | [ADR-010](ADR-010_entity_id_bigint_identity_fk_retained.md) | 엔티티 식별자 — BIGINT IDENTITY + FK 유지 | Accepted |
+| [ADR-011](ADR-011_compute_infra_ec2_single_instance.md) | 컴퓨트 인프라 — AWS EC2 단일 인스턴스 (RDS 기각) | Accepted |
+| [ADR-012](ADR-012_photo_storage_cloudflare_r2.md) | 사진 오브젝트 스토리지 — Cloudflare R2 (S3 기각) | Accepted |

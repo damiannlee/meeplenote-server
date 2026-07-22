@@ -9,8 +9,8 @@ import jakarta.persistence.Table
 import java.time.Instant
 
 @Entity
-@Table(name = "players")
-class PlayerEntity(
+@Table(name = "player_groups")
+class PlayerGroupEntity(
     @Column(name = "user_id", nullable = false)
     val userId: Long,
     @Column(name = "name", nullable = false, length = 50)
@@ -19,9 +19,6 @@ class PlayerEntity(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0
-
-    @Column(name = "is_favorite", nullable = false)
-    var isFavorite: Boolean = false
 
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now()

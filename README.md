@@ -1,6 +1,6 @@
-# meeplenote-server (미플수첩)
+# meeplenote-server (미플노트)
 
-> 서비스명 확정: **미플수첩** (영문: meeplenote), 2026-07-11.
+> 서비스명 확정: **미플노트** (영문: meeplenote), 2026-07-11 미플수첩 → 2026-07-22 미플노트로 개칭.
 
 
 한국 보드게이머의 흩어진 플레이 기록과 컬렉션을 한 곳에서 — 10초 기록 × 컬렉션 자동 연동.
@@ -57,11 +57,11 @@ src/main/kotlin/com/meeplenote/
 
 브랜치 전략(GitHub Flow), 커밋 규칙(Conventional Commits), 마이그레이션 규칙은 [docs/CONVENTIONS.md](docs/CONVENTIONS.md).
 
-## 5단계 시점의 가정·미결 사항 (정직한 고지)
+## 5단계 시점의 가정·미결 사항
 
 | 항목 | 상태 |
 |---|---|
-| 프로젝트/서비스명 | ✅ 확정 — 미플수첩 (meeplenote) |
+| 프로젝트/서비스명 | 확정 — 미플노트 (meeplenote) |
 | ADR-009 (모듈 경계 강제 방식) | **Proposed** — 개발자 승인 대기 |
 | Spring Security + JWT 의존성 | 의도적 미포함 — US-4.2 구현 시 추가 (빈 프로젝트에서 넣으면 전 엔드포인트 401로 스캐폴드 검증 방해) |
 | CD (배포 자동화) | 의도적 미포함 — 배포 인프라(OCI vs 물리 서버) 미결정. 결정 후 ci.yml에 deploy 잡 추가 |

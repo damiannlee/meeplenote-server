@@ -9,7 +9,7 @@
 ## 0. 지금 상태 (2026-07-18 기준)
 
 - 5단계(스캐폴드) 완료, 로컬 첫 빌드 검증 완료(2026-07-11, `./gradlew test` BUILD SUCCESSFUL). Testcontainers 의존성명이 Spring Boot 4.1.0의 Testcontainers 2.x 아티팩트명 변경으로 `org.testcontainers:*` → `testcontainers-*` 로 수정됨(`build.gradle.kts`).
-- 서비스명 확정: 미플수첩 (meeplenote).
+- 서비스명 확정: 미플노트 (meeplenote). (2026-07-11 미플수첩 → 2026-07-22 미플노트로 개칭, 영문명 meeplenote와의 발음 일관성 목적)
 - 페르소나 B 5~10명 인터뷰 **미실시** (n=1 자가응답만 근거) — 개발과 별개로 진행 필요.
 - 아래 표는 로드맵(§2) 대비 현재 위치 요약. 모듈별 상세는 "상세" 열의 `CLAUDE.md` 참조.
 

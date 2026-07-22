@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
+import java.time.YearMonth
 import java.util.Base64
 import java.util.UUID
 
@@ -54,6 +55,10 @@ data class PlayListItemResponse(
 data class PlayListResponse(
     val items: List<PlayListItemResponse>,
     val nextCursor: String?,
+)
+
+data class PlayCalendarResponse(
+    val items: List<PlayListItemResponse>,
 )
 
 @Service
@@ -160,6 +165,16 @@ class PlayService(
         val items = page.map { PlayListItemResponse.of(it, gamesById[it.gameId]) }
         val nextCursor = if (rows.size > limit) encodeCursor(page.last()) else null
         return PlayListResponse(items, nextCursor)
+    }
+
+    @Transactional(readOnly = true)
+    fun listPlaysByMonth(userId: Long, yearMonth: YearMonth): PlayCalendarResponse {
+        val from = yearMonth.atDay(1)
+        val to = yearMonth.atEndOfMonth()
+        val plays = playRepository.findAllByUserIdAndPlayedAtBetweenOrderByPlayedAtAscIdAsc(userId, from, to)
+        val gamesById = gameLookup.getSummaries(plays.map { it.gameId }.distinct()).associateBy { it.id }
+        val items = plays.map { PlayListItemResponse.of(it, gamesById[it.gameId]) }
+        return PlayCalendarResponse(items)
     }
 
     private fun fetchPage(userId: Long, cursor: String?, limit: Int): List<PlayEntity> {

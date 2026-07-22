@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
+import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
@@ -18,6 +19,7 @@ import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 
 data class PlayerInput(
@@ -70,4 +72,10 @@ class PlayController(
         @RequestParam(defaultValue = "20") @Min(1) @Max(50) limit: Int,
     ): PlayListResponse =
         playService.listPlays(currentUserProvider.currentUserId(), cursor, limit)
+
+    @GetMapping("/calendar")
+    fun calendar(
+        @RequestParam @DateTimeFormat(pattern = "yyyy-MM") yearMonth: YearMonth,
+    ): PlayCalendarResponse =
+        playService.listPlaysByMonth(currentUserProvider.currentUserId(), yearMonth)
 }

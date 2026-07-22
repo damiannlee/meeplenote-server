@@ -24,6 +24,7 @@ import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 
 /**
@@ -469,5 +470,85 @@ class PlayControllerIntegrationTest {
         )
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.error.code").value("INVALID_CURSOR"))
+    }
+
+    @Test
+    fun `yearMonth로 캘린더를 조회하면 해당 월의 기록만 오래된 순으로 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1020)
+        val gameId = registerGame(accessToken, "타지마할")
+        val thisMonth = LocalDate.now().withDayOfMonth(1)
+        val lastMonth = thisMonth.minusMonths(1).withDayOfMonth(1)
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId, "playedAt": "$lastMonth"}"""),
+        ).andExpect(status().isCreated)
+
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessToken")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameId, "playedAt": "$thisMonth"}"""),
+        ).andExpect(status().isCreated)
+
+        mockMvc.perform(
+            get("/api/v1/plays/calendar?yearMonth=${YearMonth.from(thisMonth)}")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].playedAt").value(thisMonth.toString()))
+            .andExpect(jsonPath("$.items[0].gameName").value("타지마할"))
+    }
+
+    @Test
+    fun `캘린더 조회에서 타 유저의 기록은 노출되지 않는다`() {
+        val accessTokenA = issueAccessToken(kakaoId = 1021, nickname = "userE")
+        val gameIdA = registerGame(accessTokenA, "위키드")
+        val thisMonth = LocalDate.now().withDayOfMonth(1)
+        mockMvc.perform(
+            post("/api/v1/plays")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer $accessTokenA")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("""{"gameId": $gameIdA, "playedAt": "$thisMonth"}"""),
+        ).andExpect(status().isCreated)
+
+        val accessTokenB = issueAccessToken(kakaoId = 1022, nickname = "userF")
+
+        mockMvc.perform(
+            get("/api/v1/plays/calendar?yearMonth=${YearMonth.from(thisMonth)}")
+                .header("Authorization", "Bearer $accessTokenB"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items.length()").value(0))
+    }
+
+    @Test
+    fun `yearMonth 형식이 올바르지 않으면 400 INVALID_PARAMETER를 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1023)
+
+        mockMvc.perform(
+            get("/api/v1/plays/calendar?yearMonth=2026-13")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.error.code").value("INVALID_PARAMETER"))
+    }
+
+    @Test
+    fun `yearMonth 없이 캘린더를 조회하면 400 MISSING_PARAMETER를 반환한다`() {
+        val accessToken = issueAccessToken(kakaoId = 1024)
+
+        mockMvc.perform(
+            get("/api/v1/plays/calendar")
+                .header("Authorization", "Bearer $accessToken"),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.error.code").value("MISSING_PARAMETER"))
     }
 }

@@ -25,6 +25,7 @@
 | M8 | 게임 DB (BGG 온디맨드 캐시) | **보류** — BGG XML API2가 Cloudflare 봇 차단으로 401. 정식 API 사용 신청 준비 중(2026-07-18) | `game/CLAUDE.md`, ADR-003 |
 | US-4.2 | 데이터 내보내기 | 완료 (PR #9), JSON만(CSV 제외) | `export/CLAUDE.md` |
 | S4 | 컬렉션 필터 (인원수·플레이시간) | 완료 (PR #10/#11) — Should 항목이지만 BGG 미의존이라 먼저 처리 | `collection/CLAUDE.md` |
+| S6 | 내 플레이 캘린더 (월별 뷰) | 완료 — Should 항목이지만 BGG 미의존이라 먼저 처리 | `play/CLAUDE.md` |
 
 **남은 Must 항목은 BGG 의존(M6의 BGG 소스 임포트, M8) 해제 대기뿐.**
 

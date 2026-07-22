@@ -312,4 +312,33 @@ class PlayServiceTest {
 
         assertThat(response.items.single().gameName).isEqualTo("Catan")
     }
+
+    @Test
+    fun `yearMonth로 조회하면 해당 월의 1일부터 말일까지 범위로 조회한다`() {
+        val yearMonth = java.time.YearMonth.of(2026, 2)
+        whenever(playRepository.findAllByUserIdAndPlayedAtBetweenOrderByPlayedAtAscIdAsc(userId, LocalDate.of(2026, 2, 1), LocalDate.of(2026, 2, 28)))
+            .thenReturn(emptyList())
+
+        playService.listPlaysByMonth(userId, yearMonth)
+
+        verify(playRepository).findAllByUserIdAndPlayedAtBetweenOrderByPlayedAtAscIdAsc(userId, LocalDate.of(2026, 2, 1), LocalDate.of(2026, 2, 28))
+    }
+
+    @Test
+    fun `yearMonth 조회 결과에 게임명과 썸네일을 배치 조회로 채운다`() {
+        val yearMonth = java.time.YearMonth.of(2026, 2)
+        val plays = listOf(
+            PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.of(2026, 2, 5)),
+            PlayEntity(userId = userId, gameId = gameId, playedAt = LocalDate.of(2026, 2, 20)),
+        )
+        whenever(playRepository.findAllByUserIdAndPlayedAtBetweenOrderByPlayedAtAscIdAsc(eq(userId), any(), any())).thenReturn(plays)
+        whenever(gameLookup.getSummaries(listOf(gameId))).thenReturn(listOf(GameSummary(gameId, "카탄", null, "thumb.png")))
+
+        val response = playService.listPlaysByMonth(userId, yearMonth)
+
+        assertThat(response.items).hasSize(2)
+        assertThat(response.items[0].gameName).isEqualTo("카탄")
+        assertThat(response.items[0].thumbnailUrl).isEqualTo("thumb.png")
+        verify(gameLookup, org.mockito.kotlin.times(1)).getSummaries(listOf(gameId))
+    }
 }

@@ -9,6 +9,7 @@
 - **M5**: `PlayStatsProvider` 신설 — `plays` 테이블 직접 GROUP BY 집계(이유는 `stats/CLAUDE.md`).
 - **M6**: `PlayerNameResolver`(플레이어 이름 해석, import와 공유), `PlayBulkImporter`(배치 임포트 전용 진입점, Idempotency-Key 경로와 별개).
 - **export**: `PlayExportProvider` 신설(유저 전체 플레이+플레이어 배치 조회).
+- **플레이어 관리(즐겨찾기·그룹·최근 플레이어)**: `PlayerService`/`PlayerController`/`PlayerGroupController` 신설(V4 마이그레이션). `GET /api/v1/players`(즐겨찾기 우선 정렬), `PATCH /api/v1/players/{id}/favorite`, `GET /api/v1/players/recent?limit=`(US-1.2 AC였던 "최근 함께한 플레이어 제안"의 서버 구현), `POST/GET /api/v1/player-groups`, `PUT/DELETE /api/v1/player-groups/{groupId}/players/{playerId}`, `DELETE /api/v1/player-groups/{groupId}`. 그룹-플레이어는 N:M(`player_group_members` 조인 테이블). **스코프는 유저 개인 로컬 명부 태깅에 한정** — `players` 테이블의 기존 원칙(계정 무연결, 소셜 그래프 금지, Won't: 커뮤니티) 그대로 유지, 그룹에 공유/초대/타 유저 참조 없음. 모임·커뮤니티로의 확장은 이번 설계에 포함하지 않음 — 실제로 필요해지면 `player_id` 기반이 아닌 `user_id` 기반의 별도 도메인/모듈로 재설계(별도 ADR 필요).
 
 ## 주의 (재발 이력 있음 — 코드 리뷰 시 확인)
 
